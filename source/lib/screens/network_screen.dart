@@ -1,0 +1,404 @@
+import 'dart:convert';
+import 'package:flutter/material.dart';
+import '../models/network_info.dart';
+import '../services/openwrt_service.dart';
+
+class NetworkScreen extends StatefulWidget {
+  final OpenWrtService service;
+
+  const NetworkScreen({super.key, required this.service});
+
+  @override
+  State<NetworkScreen> createState() => _NetworkScreenState();
+}
+
+class _NetworkScreenState extends State<NetworkScreen> {
+  List<NetworkInterface> interfaces = [];
+  bool loading = true;
+  String? error;
+  String publicIp = '';
+  String? wifiWanSsid;
+  String? wifiWanDevice;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      if (!widget.service.isConnected) await widget.service.connect();
+      final data = await widget.service.fetchNetworkInterfaces();
+      final ip = await widget.service.fetchPublicIp();
+      // Проверяем WiFi-клиент (STA mode)
+      String? staSsid, staDev;
+      try {
+        final staRaw = await widget.service.runCommand('iwinfo 2>/dev/null | grep -A5 "Mode: Client" | grep -E "ESSID:|Access Point" | head -2 || echo ""');
+        for (final line in LineSplitter.split(staRaw)) {
+          if (line.contains('ESSID:')) staSsid = line.split(':').last.trim().replaceAll('"', '');
+          if (line.contains('Access Point')) staDev = line.split(':').last.trim();
+        }
+      } catch (_) {}
+      setState(() {
+        interfaces = data; publicIp = ip.trim();
+        wifiWanSsid = staSsid; wifiWanDevice = staDev;
+        loading = false; error = null;
+      });
+    } catch (e) { setState(() { error = e.toString(); loading = false; }); }
+  }
+
+  Future<void> _disconnectWifiWan() async {
+    try {
+      await widget.service.runCommand('uci delete wireless.@wifi-iface[-1] 2>/dev/null; uci commit wireless; wifi reload');
+      await _load();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('WiFi-клиент отключён')));
+    } catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e'))); }
+  }
+
+  Future<void> _setupWan() async {
+    String? provider;
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Выберите провайдера'),
+        content: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            ...OpenWrtService.russianProviders.entries.map((e) => ListTile(
+              leading: const Icon(Icons.business),
+              title: Text(e.value['name']!),
+              subtitle: Text(e.value['desc']!),
+              trailing: Text(e.value['proto']!.toUpperCase(), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+              onTap: () { provider = e.key; Navigator.pop(ctx); },
+            )),
+          ]),
+        ),
+      ),
+    );
+    if (provider == null) return;
+
+    final proto = OpenWrtService.russianProviders[provider!]!['proto']!;
+    if (proto == 'pppoe') {
+      final user = TextEditingController();
+      final pass = TextEditingController();
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('PPPoE — логин и пароль'),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextField(controller: user, decoration: const InputDecoration(labelText: 'Логин')),
+            const SizedBox(height: 8),
+            TextField(controller: pass, decoration: const InputDecoration(labelText: 'Пароль'), obscureText: true),
+          ]),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Применить')),
+          ],
+        ),
+      );
+      if (ok == true) {
+        await widget.service.configureWan(provider!, username: user.text, password: pass.text);
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('WAN настроен, сеть перезапускается...')));
+      }
+    } else {
+      await widget.service.configureWan(provider!);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('WAN настроен (DHCP) — сеть перезапускается')));
+    }
+  }
+
+  Future<void> _showTopology() async {
+    showDialog(context: context, barrierDismissible: false, builder: (ctx) => const AlertDialog(content: Row(children: [CircularProgressIndicator(), SizedBox(width: 16), Text('Сканирование сети...')])));
+    try {
+      final devices = await widget.service.fetchTopology();
+      if (!mounted) return;
+      Navigator.pop(context);
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Row(children: [const Icon(Icons.account_tree), const SizedBox(width: 8), Text('Топология (${devices.length})')]),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: devices.length,
+              itemBuilder: (_, i) {
+                final d = devices[i];
+                final typeIcon = d['type'] == 'router' ? Icons.router : (d['type'] == 'dhcp' ? Icons.devices : Icons.computer);
+                return ListTile(
+                  leading: Icon(typeIcon, size: 28, color: d['type'] == 'router' ? Colors.orange : Colors.blue),
+                  title: Text(d['hostname'] ?? d['ip'] ?? '?'),
+                  subtitle: Text('${d['mac'] ?? ''} • ${d['iface'] ?? ''} ${d['port'] != null ? '• ${d['port']}' : ''}'),
+                );
+              },
+            ),
+          ),
+          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.pop(context);
+    }
+  }
+
+  Future<void> _speedtest() async {
+    showDialog(context: context, barrierDismissible: false, builder: (ctx) => const AlertDialog(content: Row(children: [CircularProgressIndicator(), SizedBox(width: 16), Text('Проверка speedtest...')])));
+    try {
+      await widget.service.connect();
+      // Проверяем все доступные методы (Cloudflare-тест работает через curl)
+      String? availableMethod;
+      for (final method in ['curl', 'iperf3', 'speedtest-netperf', 'wget']) {
+        final check = await widget.service.runCommand('(type $method || command -v $method || test -x /usr/bin/$method || test -x /usr/sbin/$method) >/dev/null 2>&1 && echo OK || echo NO');
+        if (check.trim() == 'OK') { availableMethod = method; break; }
+      }
+
+      if (!mounted) return;
+      Navigator.pop(context);
+
+      if (availableMethod == null) {
+        final install = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Не найдены инструменты замера'),
+            content: const Text('Установить curl и iperf3?\n\n'
+                'curl — универсальный тест через Cloudflare (точки в РФ/СНГ/ЕС)\n'
+                'iperf3 — точный замер в обе стороны\n\n'
+                'Также доступны: speedtest-netperf, wget'),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
+              FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Установить curl + iperf3')),
+            ],
+          ),
+        );
+        if (install != true) return;
+        showDialog(context: context, barrierDismissible: false, builder: (ctx) => const AlertDialog(content: Row(children: [CircularProgressIndicator(), SizedBox(width: 16), Text('Установка curl и iperf3...')])));
+        try {
+          await widget.service.installPackages(['curl', 'iperf3']);
+          if (!mounted) return;
+          Navigator.pop(context);
+        } catch (e) {
+          if (!mounted) return;
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка установки: $e')));
+          return;
+        }
+      }
+
+      showDialog(context: context, barrierDismissible: false, builder: (ctx) => const AlertDialog(content: Row(children: [CircularProgressIndicator(), SizedBox(width: 16), Text('Speedtest... (~20-40 сек)')])));
+      final result = await widget.service.runSpeedtest();
+      if (!mounted) return;
+      Navigator.pop(context);
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Speedtest'),
+          content: SingleChildScrollView(child: SelectableText(result)),
+          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
+    }
+  }
+
+  Future<void> _ping() async {
+    final ctrl = TextEditingController(text: '8.8.8.8');
+    String? result;
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSt) => AlertDialog(
+          title: const Text('Ping'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: ctrl, decoration: const InputDecoration(labelText: 'Хост')),
+              if (result != null) ...[
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.maxFinite,
+                  height: 200,
+                  child: SingleChildScrollView(child: SelectableText(result!)),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Закрыть')),
+            FilledButton(
+              onPressed: () async {
+                setSt(() => result = 'Проверка...');
+                try {
+                  final res = await widget.service.pingHost(ctrl.text.trim());
+                  setSt(() => result = res);
+                } catch (e) {
+                  setSt(() => result = 'Ошибка: $e');
+                }
+              },
+              child: const Text('Ping'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Scaffold(
+      body: RefreshIndicator(
+        onRefresh: _load,
+        child: CustomScrollView(
+          slivers: [
+            SliverAppBar.large(
+              title: const Text('Сеть'),
+              actions: [
+                PopupMenuButton<String>(onSelected: (v) { if (v == 'speedtest') _speedtest(); if (v == 'ping') _ping(); if (v == 'wan') _setupWan(); if (v == 'topology') _showTopology(); },
+                  itemBuilder: (ctx) => [
+                    const PopupMenuItem(value: 'topology', child: ListTile(leading: Icon(Icons.account_tree), title: Text('Топология сети'))),
+                    const PopupMenuItem(value: 'wan', child: ListTile(leading: Icon(Icons.settings_ethernet), title: Text('Настроить WAN'))),
+                    const PopupMenuItem(value: 'speedtest', child: ListTile(leading: Icon(Icons.speed), title: Text('Speedtest'))),
+                    const PopupMenuItem(value: 'ping', child: ListTile(leading: Icon(Icons.network_ping), title: Text('Ping'))),
+                  ],
+                ),
+                IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
+              ],
+            ),
+            if (loading)
+              const SliverFillRemaining(child: Center(child: CircularProgressIndicator()))
+            else if (error != null)
+              _buildError(theme)
+            else ...[
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                sliver: SliverToBoxAdapter(
+                  child: Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        children: [
+                          Icon(Icons.public, color: theme.colorScheme.primary, size: 32),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Публичный IP', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                                Text(
+                                  publicIp.isEmpty ? '—' : publicIp,
+                                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              if (wifiWanSsid != null && wifiWanSsid!.isNotEmpty)
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  sliver: SliverToBoxAdapter(
+                    child: Card(
+                      color: Colors.orange.withValues(alpha: 0.08),
+                      child: Padding(
+                        padding: const EdgeInsets.all(14),
+                        child: Row(children: [
+                          const Icon(Icons.wifi, color: Colors.orange, size: 28),
+                          const SizedBox(width: 12),
+                          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Text('Интернет через Wi-Fi', style: theme.textTheme.bodySmall?.copyWith(color: Colors.orange)),
+                            Text(wifiWanSsid!, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                          ])),
+                          OutlinedButton.icon(onPressed: _disconnectWifiWan, icon: const Icon(Icons.link_off), label: const Text('Откл.'), style: OutlinedButton.styleFrom(foregroundColor: Colors.orange)),
+                        ]),
+                      ),
+                    ),
+                  ),
+                ),
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (ctx, i) {
+                      final iface = interfaces[i];
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        child: ExpansionTile(
+                          leading: Icon(
+                            iface.up ? Icons.check_circle : Icons.cancel,
+                            color: iface.up ? Colors.green : theme.colorScheme.error,
+                          ),
+                          title: Text(iface.name),
+                          subtitle: Text('${iface.protocol?.toUpperCase() ?? ''} • ${iface.device ?? ''}'),
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _row('IP', iface.ipAddresses?.join('\n') ?? '—'),
+                                  if ((iface.ipv6Addresses ?? const []).isNotEmpty)
+                                    _row('IPv6', (iface.ipv6Addresses ?? const []).join('\n')),
+                                  _row('Шлюз', iface.gateway ?? '—'),
+                                  _row('DNS', iface.dns ?? '—'),
+                                  _row('Трафик', iface.bytesHuman),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                    childCount: interfaces.length,
+                  ),
+                ),
+              ),
+              const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _row(String label, String value) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(width: 80, child: Text(label, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant))),
+          Expanded(child: Text(value, style: theme.textTheme.bodyMedium)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildError(ThemeData theme) {
+    return SliverFillRemaining(
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.error_outline, size: 64, color: theme.colorScheme.error),
+              const SizedBox(height: 16),
+              Text('Ошибка', style: theme.textTheme.titleMedium),
+              Text(error!, textAlign: TextAlign.center),
+              const SizedBox(height: 16),
+              FilledButton.tonal(onPressed: _load, child: const Text('Повторить')),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

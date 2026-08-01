@@ -1,0 +1,33 @@
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Flutter / Dart
+source/build/
+source/.dart_tool/
+source/.flutter-plugins*
+source/*.iml
+source/android/local.properties
+source/android/.gradle/
+source/android/.kotlin/
+source/android/app/debug/
+source/android/app/profile/
+source/android/app/release/
+
+# Secrets
+*.env
+# Бинарные артефакты сборки (публикуются через GitHub Release)
+app.zip
+/releases/*.apk
