@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/app_strings.dart';
 import 'package:intl/intl.dart';
 import '../models/client_info.dart';
 import '../services/openwrt_service.dart';
@@ -13,6 +14,7 @@ class ClientsScreen extends StatefulWidget {
 }
 
 class ClientsScreenState extends State<ClientsScreen> {
+  String _t(String source) => AppStrings.of(context).text(source);
   List<ClientInfo> allClients = [];
   List<ClientInfo> filtered = [];
   List<String> blockedMacs = [];
@@ -75,7 +77,7 @@ class ClientsScreenState extends State<ClientsScreen> {
     // Остальные
     for (final c in allClients) {
       if (!order.contains(c.connectionType)) {
-        final key = c.connectionType ?? 'Другое';
+        final key = c.connectionType ?? _t('Другое');
         map.putIfAbsent(key, () => []).add(c);
       }
     }
@@ -104,14 +106,14 @@ class ClientsScreenState extends State<ClientsScreen> {
     final gb = await showDialog<double>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Лимит — ${client.hostname}'),
+         title: Text('${_t('Лимит')} — ${client.hostname}'),
         content: TextField(
           controller: ctrl,
           keyboardType: TextInputType.number,
-          decoration: const InputDecoration(labelText: 'ГБ (0 — без лимита)'),
+           decoration: InputDecoration(labelText: _t('ГБ (0 — без лимита)')),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
+           TextButton(onPressed: () => Navigator.pop(ctx), child: Text(_t('Отмена'))),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, double.tryParse(ctrl.text.replaceAll(',', '.'))),
             child: const Text('OK'),
@@ -130,14 +132,14 @@ class ClientsScreenState extends State<ClientsScreen> {
     final kbps = await showDialog<int>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Скорость — ${c.hostname}'),
+         title: Text('${_t('Скорость')} — ${c.hostname}'),
         content: TextField(
           controller: ctrl,
-          decoration: const InputDecoration(labelText: 'КБ/с (0=снять)'),
+           decoration: InputDecoration(labelText: _t('КБ/с (0=снять)')),
           keyboardType: TextInputType.number,
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
+           TextButton(onPressed: () => Navigator.pop(ctx), child: Text(_t('Отмена'))),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, int.tryParse(ctrl.text)),
             child: const Text('OK'),
@@ -147,7 +149,7 @@ class ClientsScreenState extends State<ClientsScreen> {
     );
     if (kbps == null) return;
     await widget.service.applySpeedLimit(c.mac, kbps);
-    if (mounted) _snack(kbps == 0 ? 'Снято' : 'Скорость: $kbps КБ/с');
+    if (mounted) _snack(kbps == 0 ? _t('Снято') : '${_t('Скорость')}: $kbps ${_t('КБ/с')}');
   }
 
   Future<void> _setStaticIp(ClientInfo c) async {
@@ -158,27 +160,27 @@ class ClientsScreenState extends State<ClientsScreen> {
     final act = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Стат. IP — ${c.hostname}'),
+         title: Text('${_t('Стат. IP')} — ${c.hostname}'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             if (ex != null)
               Chip(
-                label: Text('Назначен: ${ex['ip']}'),
+                 label: Text('${_t('Назначен:')} ${ex['ip']}'),
                 backgroundColor: Colors.green.withValues(alpha: 0.1),
               ),
-            TextField(controller: ipCtrl, decoration: const InputDecoration(labelText: 'IP-адрес')),
-            TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Имя')),
+             TextField(controller: ipCtrl, decoration: InputDecoration(labelText: _t('IP-адрес'))),
+             TextField(controller: nameCtrl, decoration: InputDecoration(labelText: _t('Имя'))),
           ],
         ),
         actions: [
           if (ex != null)
             TextButton(
               onPressed: () => Navigator.pop(ctx, 'delete'),
-              child: const Text('Удалить', style: TextStyle(color: Colors.red)),
+               child: Text(_t('Удалить'), style: const TextStyle(color: Colors.red)),
             ),
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, 'save'), child: const Text('Сохранить')),
+           TextButton(onPressed: () => Navigator.pop(ctx), child: Text(_t('Отмена'))),
+           FilledButton(onPressed: () => Navigator.pop(ctx, 'save'), child: Text(_t('Сохранить'))),
         ],
       ),
     );
@@ -188,7 +190,7 @@ class ClientsScreenState extends State<ClientsScreen> {
     } else {
       await widget.service.setStaticLease(mac: c.mac, ip: ipCtrl.text, hostname: nameCtrl.text);
     }
-    if (mounted) _snack('Готово');
+    if (mounted) _snack(_t('Готово'));
     await _load();
   }
 
@@ -198,14 +200,14 @@ class ClientsScreenState extends State<ClientsScreen> {
     final name = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Имя — ${c.mac}'),
+         title: Text('${_t('Имя')} — ${c.mac}'),
         content: TextField(
           controller: ctrl,
-          decoration: const InputDecoration(labelText: 'Имя устройства'),
+           decoration: InputDecoration(labelText: _t('Имя устройства')),
           autofocus: true,
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
+           TextButton(onPressed: () => Navigator.pop(ctx), child: Text(_t('Отмена'))),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
             child: const Text('OK'),
@@ -339,6 +341,7 @@ class ClientsScreenState extends State<ClientsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
     final t = Theme.of(context);
     final sections = _byInterface;
     return Scaffold(
@@ -348,12 +351,12 @@ class ClientsScreenState extends State<ClientsScreen> {
           physics: const BouncingScrollPhysics(),
           slivers: [
             SliverAppBar.large(
-              title: const Text('Клиенты'),
+              title: Text(s.clients),
               actions: [
                 IconButton(
                   icon: Icon(treeView ? Icons.list : Icons.account_tree),
                   onPressed: () => setState(() => treeView = !treeView),
-                  tooltip: 'Вид',
+                   tooltip: _t('Вид'),
                 ),
                 IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
               ],
@@ -363,7 +366,7 @@ class ClientsScreenState extends State<ClientsScreen> {
               sliver: SliverToBoxAdapter(
                 child: SearchBar(
                   controller: _searchCtrl,
-                  hintText: 'Поиск',
+                   hintText: _t('Поиск'),
                   leading: const Icon(Icons.search),
                   trailing: _searchCtrl.text.isNotEmpty
                       ? [
@@ -386,16 +389,16 @@ class ClientsScreenState extends State<ClientsScreen> {
                     children: [
                       Icon(Icons.error_outline, size: 64, color: t.colorScheme.error),
                       const SizedBox(height: 16),
-                      Text('Ошибка', style: t.textTheme.titleMedium),
+                       Text(_t('Ошибка'), style: t.textTheme.titleMedium),
                       Text(error!, textAlign: TextAlign.center),
                       const SizedBox(height: 16),
-                      FilledButton.tonal(onPressed: _load, child: const Text('Повторить')),
+                       FilledButton.tonal(onPressed: _load, child: Text(_t('Повторить'))),
                     ],
                   ),
                 ),
               )
             else if (filtered.isEmpty)
-              const SliverFillRemaining(child: Center(child: Text('Клиенты не найдены')))
+              SliverFillRemaining(child: Center(child: Text(_t('Клиенты не найдены'))))
             else if (!treeView)
               SliverPadding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -495,7 +498,7 @@ class ClientsScreenState extends State<ClientsScreen> {
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
-                    '${c.dlSpeed!.toStringAsFixed(1)} Мбит/с',
+                     '${c.dlSpeed!.toStringAsFixed(1)} ${_t('Мбит/с')}',
                     style: TextStyle(
                       fontSize: 10, fontWeight: FontWeight.bold,
                       color: c.dlSpeed! > 10 ? Colors.green.shade700 : Colors.orange.shade700,
@@ -522,19 +525,19 @@ class ClientsScreenState extends State<ClientsScreen> {
                         backgroundColor: bandColor.withValues(alpha: 0.08),
                       ),
                     ),
-                  _r(t, 'Тип', c.connectionType ?? '—'),
-                  _r(t, 'Точка доступа', c.accessPoint ?? c.interface ?? '—'),
-                  if (c.rxBitrate != null) _r(t, 'Битрейт (RX)', c.rxBitrate!),
-                  if (c.txBitrate != null) _r(t, 'Битрейт (TX)', c.txBitrate!),
-                  if (c.dlSpeed != null && c.dlSpeed! > 0) _r(t, '↓ Скорость', c.dlSpeedHuman),
-                  if (c.ulSpeed != null && c.ulSpeed! > 0) _r(t, '↑ Скорость', c.ulSpeedHuman),
-                  _r(t, '↓ Получено', c.rxHuman),
-                  _r(t, '↑ Отправлено', c.txHuman),
+                   _r(t, _t('Тип'), c.connectionType ?? '—'),
+                   _r(t, _t('Точка доступа'), c.accessPoint ?? c.interface ?? '—'),
+                   if (c.rxBitrate != null) _r(t, _t('Битрейт (RX)'), c.rxBitrate!),
+                   if (c.txBitrate != null) _r(t, _t('Битрейт (TX)'), c.txBitrate!),
+                   if (c.dlSpeed != null && c.dlSpeed! > 0) _r(t, _t('↓ Скорость'), c.dlSpeedHuman),
+                   if (c.ulSpeed != null && c.ulSpeed! > 0) _r(t, _t('↑ Скорость'), c.ulSpeedHuman),
+                   _r(t, _t('↓ Получено'), c.rxHuman),
+                   _r(t, _t('↑ Отправлено'), c.txHuman),
                   if (c.monthTotalBytes > 0) ...[
                     const Divider(height: 16),
-                    _r(t, 'Трафик за месяц', c.monthTotalHuman),
-                    _r(t, '↓ Месяц', c.monthRxHuman),
-                    _r(t, '↑ Месяц', c.monthTxHuman),
+                     _r(t, _t('Трафик за месяц'), c.monthTotalHuman),
+                     _r(t, _t('↓ Месяц'), c.monthRxHuman),
+                     _r(t, _t('↑ Месяц'), c.monthTxHuman),
                   ],
                   if (limit != null && limit > 0) ...[
                     const SizedBox(height: 6),
@@ -545,7 +548,7 @@ class ClientsScreenState extends State<ClientsScreen> {
                         progress > 0.9 ? Colors.red : t.colorScheme.primary,
                       ),
                     ),
-                    Text('Лимит: ${_gb(limit)} ГБ (${(progress * 100).toStringAsFixed(0)}%)',
+                     Text('${_t('Лимит:')} ${_gb(limit)} ${_t('ГБ')} (${(progress * 100).toStringAsFixed(0)}%)',
                         style: t.textTheme.bodySmall),
                   ],
                   const SizedBox(height: 8),
@@ -553,19 +556,19 @@ class ClientsScreenState extends State<ClientsScreen> {
                     _btn(() {
                       _loadVendor(c);
                       _renameClient(c);
-                    }, Icons.edit, 'Имя', t.colorScheme.primary),
+                     }, Icons.edit, _t('Имя'), t.colorScheme.primary),
                     _btn(() {
                       _loadVendor(c);
                       _classify(c);
-                    }, Icons.psychology, _deviceType(c) ?? 'Тип', t.colorScheme.secondary),
+                     }, Icons.psychology, _deviceType(c) ?? _t('Тип'), t.colorScheme.secondary),
                     _btn(
                       () => _toggleBlock(c),
                       blocked ? Icons.lock_open : Icons.block,
-                      blocked ? 'Разблок' : 'Блок',
+                       blocked ? _t('Разблок') : _t('Блок'),
                       blocked ? Colors.green : Colors.red,
                     ),
-                    _btn(() => _setLimit(c), Icons.data_usage, 'ГБ'),
-                    _btn(() => _setSpeedLimit(c), Icons.speed, 'КБ/с'),
+                     _btn(() => _setLimit(c), Icons.data_usage, _t('ГБ')),
+                     _btn(() => _setSpeedLimit(c), Icons.speed, _t('КБ/с')),
                     _btn(() => _setStaticIp(c), Icons.router, 'IP'),
                   ]),
                 ],

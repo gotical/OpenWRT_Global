@@ -16,7 +16,7 @@ class AboutScreen extends StatelessWidget {
 
   void _copy(BuildContext context, String text) {
     Clipboard.setData(ClipboardData(text: text));
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Скопировано: $text')));
+     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${AppStrings.of(context).text('Скопировано:')} $text')));
   }
 
   @override
@@ -69,7 +69,7 @@ class AboutScreen extends StatelessWidget {
                 const SizedBox(height: 4),
                 Center(
                    child: Text(
-                     '${strings.version} 4.0.2',
+                     '${strings.version} 4.0.3',
                     style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                   ),
                  ),
@@ -102,7 +102,7 @@ class AboutScreen extends StatelessWidget {
                       ListTile(
                         leading: const Icon(Icons.business),
                          title: Text(strings.developer),
-                        subtitle: const Text('РыбинскLAB'),
+                          subtitle: Text(strings.text('РыбинскLAB')),
                         trailing: IconButton(
                           icon: const Icon(Icons.open_in_new),
                           onPressed: () => _openUrl('https://rybinsklab.ru'),
@@ -112,8 +112,8 @@ class AboutScreen extends StatelessWidget {
                       const Divider(height: 1),
                       ListTile(
                         leading: const Icon(Icons.person),
-                        title: const Text('Автор проекта'),
-                        subtitle: const Text('Усачёв Денис'),
+                         title: Text(strings.text('Автор проекта')),
+                          subtitle: Text(strings.text('Усачёв Денис')),
                         onTap: () => _copy(context, 'Усачёв Денис'),
                       ),
                       const Divider(height: 1),
@@ -136,8 +136,8 @@ class AboutScreen extends StatelessWidget {
                       children: [
                          Text(strings.features, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
                         const SizedBox(height: 8),
-                        const Text(
-                          '• Дашборд с CPU/RAM/uptime и графиками\n'
+                         Text(
+                           strings.text('• Дашборд с CPU/RAM/uptime и графиками\n'
                           '• Мониторинг клиентов с трафиком, блокировка, лимиты\n'
                           '• Управление Wi-Fi: каналы, ширина, карта помех, AI-оптимизация\n'
                           '• Анализатор каналов (роутер + телефон с учётом ширины)\n'
@@ -151,8 +151,8 @@ class AboutScreen extends StatelessWidget {
                           '• Обновление прошивки OpenWRT через auc\n'
                           '• Топология сети, статические IP, ограничения скорости\n'
                           '• Проверка зависимостей с автоустановкой\n'
-                          '• Поддержка OpenWrt 24.10.3 / 24.10.8 / 25.12.5',
-                          style: TextStyle(fontSize: 13),
+                           '• Поддержка OpenWrt 24.10.3 / 24.10.8 / 25.12.5'),
+                           style: const TextStyle(fontSize: 13),
                         ),
                       ],
                     ),
@@ -167,15 +167,15 @@ class AboutScreen extends StatelessWidget {
                       children: [
                          Text(strings.acknowledgements, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
                         const SizedBox(height: 8),
-                        const Text(
-                          'Начиная с версии 3.9.0 в приложении используется код, изученный '
+                         Text(
+                           strings.text('Начиная с версии 3.9.0 в приложении используется код, изученный '
                           'из проектов openwrt-router-control (github.com/Vihtoor/openwrt-router-control) '
-                          'и StrykerOSS (github.com/zalexdev/strykerapp).',
-                          style: TextStyle(fontSize: 13),
+                           'и StrykerOSS (github.com/zalexdev/strykerapp).'),
+                           style: const TextStyle(fontSize: 13),
                         ),
                         const SizedBox(height: 8),
-                        const Text(
-                          'Благодаря этому были улучшены:\n'
+                         Text(
+                           strings.text('Благодаря этому были улучшены:\n'
                           '• Анализатор каналов с учётом ширины (20/40/80/160 MHz)\n'
                           '• Измерение скорости (iperf3 + curl + wget)\n'
                           '• Терминал (Beta) — интерактивный SSH\n'
@@ -183,20 +183,20 @@ class AboutScreen extends StatelessWidget {
                           '• MAC Changer — смена MAC адреса\n'
                           '• WPS Audit — проверка уязвимостей\n'
                           '• OS Fingerprinting — определение устройств по портам\n'
-                          '• Nmap Profiles — пресеты для сканирования',
-                          style: TextStyle(fontSize: 13, color: Colors.grey),
+                           '• Nmap Profiles — пресеты для сканирования'),
+                           style: const TextStyle(fontSize: 13, color: Colors.grey),
                         ),
                         const SizedBox(height: 12),
                         OutlinedButton.icon(
                           onPressed: () => _openUrl('https://github.com/Vihtoor/openwrt-router-control'),
                           icon: const Icon(Icons.open_in_new, size: 18),
-                          label: const Text('Исходный код openwrt-router-control'),
+                           label: Text(strings.text('Источник кода openwrt-router-control')),
                         ),
                         const SizedBox(height: 8),
                         OutlinedButton.icon(
                           onPressed: () => _openUrl('https://github.com/zalexdev/strykerapp'),
                           icon: const Icon(Icons.open_in_new, size: 18),
-                          label: const Text('Исходный код StrykerOSS'),
+                           label: Text(strings.text('Исходный код StrykerOSS')),
                         ),
                       ],
                     ),

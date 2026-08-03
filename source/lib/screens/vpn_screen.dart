@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/app_strings.dart';
 import '../models/vpn_info.dart';
 import '../services/openwrt_service.dart';
 
@@ -12,6 +13,7 @@ class VpnScreen extends StatefulWidget {
 }
 
 class _VpnScreenState extends State<VpnScreen> {
+  AppStrings get s => AppStrings.of(context);
   List<VpnInterface> vpns = [];
   bool loading = true;
   String? error;
@@ -47,7 +49,7 @@ class _VpnScreenState extends State<VpnScreen> {
         // Выключение
         await widget.service.vpnDown(v.name);
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${v.name} выключен')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${v.name} ${s.text('Выключен')}')));
       } else {
         // Взаимное исключение: выключаем другие VPN того же типа
         final others = vpns.where((o) =>
@@ -74,12 +76,12 @@ class _VpnScreenState extends State<VpnScreen> {
           }
         }
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${v.name} включён')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${v.name} ${s.text('Включён')}')));
       }
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка: $e'), backgroundColor: Colors.red.shade700));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${s.text('Ошибка')}: $e'), backgroundColor: Colors.red.shade700));
     } finally {
       if (mounted) setState(() => _toggling = null);
     }
@@ -95,7 +97,7 @@ class _VpnScreenState extends State<VpnScreen> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${s.text('Ошибка')}: $e')));
     }
   }
 
@@ -103,11 +105,11 @@ class _VpnScreenState extends State<VpnScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Удалить VPN?'),
+        title: Text(s.text('Удалить VPN?')),
         content: Text('${v.name} (${v.type})'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Удалить')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(s.text('Отмена'))),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(s.text('Удалить'))),
         ],
       ),
     );
@@ -117,7 +119,7 @@ class _VpnScreenState extends State<VpnScreen> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${s.text('Ошибка')}: $e')));
     }
   }
 
@@ -127,18 +129,18 @@ class _VpnScreenState extends State<VpnScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Импорт WireGuard .conf'),
+        title: Text(s.text('Импорт WireGuard .conf')),
         content: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Название интерфейса')),
+            TextField(controller: nameCtrl, decoration: InputDecoration(labelText: s.text('Название интерфейса'))),
             const SizedBox(height: 8),
-            TextField(controller: ctrl, maxLines: 8, decoration: const InputDecoration(labelText: 'Содержимое .conf')),
+            TextField(controller: ctrl, maxLines: 8, decoration: InputDecoration(labelText: s.text('Содержимое .conf'))),
             const SizedBox(height: 8),
-            const Text('Автоматически распознаются: Address, PrivateKey, PublicKey, Endpoint, DNS', style: TextStyle(fontSize: 11)),
+            Text(s.text('Автоматически распознаются: Address, PrivateKey, PublicKey, Endpoint, DNS'), style: const TextStyle(fontSize: 11)),
           ]),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(s.text('Отмена'))),
           FilledButton(onPressed: () async {
             try {
               final lines = ctrl.text.split('\n');
@@ -153,7 +155,7 @@ class _VpnScreenState extends State<VpnScreen> {
               }
               if (priv == null || addr == null || pub == null || ep == null) {
                 if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Недостаточно данных в .conf')));
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.text('Недостаточно данных в .conf'))));
                 return;
               }
               await widget.service.addWireGuard(
@@ -170,9 +172,9 @@ class _VpnScreenState extends State<VpnScreen> {
               await _load();
             } catch (e) {
               if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${s.text('Ошибка')}: $e')));
             }
-          }, child: const Text('Импортировать')),
+          }, child: Text(s.text('Импортировать'))),
         ],
       ),
     );
@@ -182,16 +184,16 @@ class _VpnScreenState extends State<VpnScreen> {
     final name = TextEditingController(), server = TextEditingController(), user = TextEditingController(), pass = TextEditingController(), secret = TextEditingController();
     showDialog(context: context, builder: (ctx) => AlertDialog(
       title: const Text('L2TP/IPsec'), content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-        TextField(controller: name, decoration: const InputDecoration(labelText: 'Название')),
-        TextField(controller: server, decoration: const InputDecoration(labelText: 'Сервер')),
-        TextField(controller: user, decoration: const InputDecoration(labelText: 'Логин')),
-        TextField(controller: pass, decoration: const InputDecoration(labelText: 'Пароль'), obscureText: true),
-        TextField(controller: secret, decoration: const InputDecoration(labelText: 'IPsec Secret (опц.)')),
+        TextField(controller: name, decoration: InputDecoration(labelText: s.text('Название'))),
+        TextField(controller: server, decoration: InputDecoration(labelText: s.text('Сервер'))),
+        TextField(controller: user, decoration: InputDecoration(labelText: s.text('Логин'))),
+        TextField(controller: pass, decoration: InputDecoration(labelText: s.text('Пароль')), obscureText: true),
+        TextField(controller: secret, decoration: InputDecoration(labelText: s.text('IPsec Secret (опц.)'))),
       ])),
-      actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')), FilledButton(onPressed: () async {
+      actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: Text(s.text('Отмена'))), FilledButton(onPressed: () async {
         await widget.service.addL2tpClient(name: name.text, server: server.text, username: user.text, password: pass.text, secret: secret.text.isNotEmpty ? secret.text : null);
-        if (!mounted) return; Navigator.pop(ctx); await _load(); _snack('L2TP добавлен');
-      }, child: const Text('Добавить'))],
+        if (!mounted) return; Navigator.pop(ctx); await _load(); _snack(s.text('L2TP добавлен'));
+      }, child: Text(s.text('Добавить')))],
     ));
   }
 
@@ -199,15 +201,15 @@ class _VpnScreenState extends State<VpnScreen> {
     final name = TextEditingController(), server = TextEditingController(), user = TextEditingController(), pass = TextEditingController();
     showDialog(context: context, builder: (ctx) => AlertDialog(
       title: const Text('PPTP'), content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-        TextField(controller: name, decoration: const InputDecoration(labelText: 'Название')),
-        TextField(controller: server, decoration: const InputDecoration(labelText: 'Сервер')),
-        TextField(controller: user, decoration: const InputDecoration(labelText: 'Логин')),
-        TextField(controller: pass, decoration: const InputDecoration(labelText: 'Пароль'), obscureText: true),
+        TextField(controller: name, decoration: InputDecoration(labelText: s.text('Название'))),
+        TextField(controller: server, decoration: InputDecoration(labelText: s.text('Сервер'))),
+        TextField(controller: user, decoration: InputDecoration(labelText: s.text('Логин'))),
+        TextField(controller: pass, decoration: InputDecoration(labelText: s.text('Пароль')), obscureText: true),
       ])),
-      actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')), FilledButton(onPressed: () async {
+      actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: Text(s.text('Отмена'))), FilledButton(onPressed: () async {
         await widget.service.addPptpClient(name: name.text, server: server.text, username: user.text, password: pass.text);
-        if (!mounted) return; Navigator.pop(ctx); await _load(); _snack('PPTP добавлен');
-      }, child: const Text('Добавить'))],
+        if (!mounted) return; Navigator.pop(ctx); await _load(); _snack(s.text('PPTP добавлен'));
+      }, child: Text(s.text('Добавить')))],
     ));
   }
 
@@ -228,61 +230,61 @@ class _VpnScreenState extends State<VpnScreen> {
         final epCtrl = TextEditingController(text: '$ep:$eport');
         final dnsCtrl = TextEditingController(text: dns);
         await showDialog(context: context, builder: (ctx) => AlertDialog(
-          title: Text('Изменить ${v.name}'),
+          title: Text('${s.text('Изменить')} ${v.name}'),
           content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
             TextField(controller: privCtrl, decoration: const InputDecoration(labelText: 'Private key')),
-            TextField(controller: pubCtrl, decoration: const InputDecoration(labelText: 'Public key сервера')),
-            TextField(controller: addrCtrl, decoration: const InputDecoration(labelText: 'IP клиента')),
-            TextField(controller: epCtrl, decoration: const InputDecoration(labelText: 'Сервер:порт')),
+            TextField(controller: pubCtrl, decoration: InputDecoration(labelText: s.text('Public key сервера'))),
+            TextField(controller: addrCtrl, decoration: InputDecoration(labelText: s.text('IP клиента'))),
+            TextField(controller: epCtrl, decoration: InputDecoration(labelText: s.text('Сервер:порт'))),
             TextField(controller: dnsCtrl, decoration: const InputDecoration(labelText: 'DNS')),
           ])),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
+            TextButton(onPressed: () => Navigator.pop(ctx), child: Text(s.text('Отмена'))),
             FilledButton(onPressed: () async {
               Navigator.pop(ctx);
               final esc = (String s) => s.replaceAll("'", "'\\''");
               final parts = epCtrl.text.split(':');
               await widget.service.runCommand("uci set network.${v.name}.private_key='${esc(privCtrl.text)}'; uci set network.${v.name}.addresses='${esc(addrCtrl.text)}'; uci set network.${v.name}_peer.public_key='${esc(pubCtrl.text)}'; uci set network.${v.name}_peer.endpoint_host='${esc(parts[0])}'; uci set network.${v.name}_peer.endpoint_port='${esc(parts.length > 1 ? parts[1] : '51820')}'; uci commit network; /etc/init.d/network reload");
               await _load();
-            }, child: const Text('Сохранить')),
+            }, child: Text(s.text('Сохранить'))),
           ],
         ));
       } catch (e) { if (mounted) _snack('$e'); }
     } else {
-      _snack('Редактирование доступно для WireGuard');
+      _snack(s.text('Редактирование доступно для WireGuard'));
     }
   }
 
   void _snack(String m) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m), behavior: SnackBarBehavior.floating));
 
   void _showSstpDialog() {
-    final n = TextEditingController(), s = TextEditingController(), u = TextEditingController(), p = TextEditingController();
+    final n = TextEditingController(), server = TextEditingController(), u = TextEditingController(), p = TextEditingController();
     showDialog(context: context, builder: (ctx) => AlertDialog(title: const Text('SSTP'), content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-      TextField(controller: n, decoration: const InputDecoration(labelText: 'Название')), TextField(controller: s, decoration: const InputDecoration(labelText: 'Сервер')), TextField(controller: u, decoration: const InputDecoration(labelText: 'Логин')), TextField(controller: p, decoration: const InputDecoration(labelText: 'Пароль'), obscureText: true),
-    ])), actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')), FilledButton(onPressed: () async {
-      await widget.service.addSstpClient(name: n.text, server: s.text, username: u.text, password: p.text);
-      if (!mounted) return; Navigator.pop(ctx); await _load(); _snack('SSTP добавлен');
-    }, child: const Text('Добавить'))]));
+      TextField(controller: n, decoration: InputDecoration(labelText: s.text('Название'))), TextField(controller: server, decoration: InputDecoration(labelText: s.text('Сервер'))), TextField(controller: u, decoration: InputDecoration(labelText: s.text('Логин'))), TextField(controller: p, decoration: InputDecoration(labelText: s.text('Пароль')), obscureText: true),
+    ])), actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: Text(s.text('Отмена'))), FilledButton(onPressed: () async {
+      await widget.service.addSstpClient(name: n.text, server: server.text, username: u.text, password: p.text);
+      if (!mounted) return; Navigator.pop(ctx); await _load(); _snack(s.text('SSTP добавлен'));
+    }, child: Text(s.text('Добавить')))]));
   }
 
   void _showIpsecDialog() {
-    final n = TextEditingController(), s = TextEditingController(), u = TextEditingController(), p = TextEditingController(), psk = TextEditingController();
+    final n = TextEditingController(), server = TextEditingController(), u = TextEditingController(), p = TextEditingController(), psk = TextEditingController();
     showDialog(context: context, builder: (ctx) => AlertDialog(title: const Text('IPsec / IKEv2'), content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-      TextField(controller: n, decoration: const InputDecoration(labelText: 'Название')), TextField(controller: s, decoration: const InputDecoration(labelText: 'Сервер')), TextField(controller: u, decoration: const InputDecoration(labelText: 'Логин')), TextField(controller: p, decoration: const InputDecoration(labelText: 'Пароль'), obscureText: true), TextField(controller: psk, decoration: const InputDecoration(labelText: 'Pre-Shared Key')),
-    ])), actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')), FilledButton(onPressed: () async {
-      await widget.service.addIpsecClient(name: n.text, server: s.text, username: u.text, password: p.text, psk: psk.text);
-      if (!mounted) return; Navigator.pop(ctx); await _load(); _snack('IPsec добавлен');
-    }, child: const Text('Добавить'))]));
+      TextField(controller: n, decoration: InputDecoration(labelText: s.text('Название'))), TextField(controller: server, decoration: InputDecoration(labelText: s.text('Сервер'))), TextField(controller: u, decoration: InputDecoration(labelText: s.text('Логин'))), TextField(controller: p, decoration: InputDecoration(labelText: s.text('Пароль')), obscureText: true), TextField(controller: psk, decoration: const InputDecoration(labelText: 'Pre-Shared Key')),
+    ])), actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: Text(s.text('Отмена'))), FilledButton(onPressed: () async {
+      await widget.service.addIpsecClient(name: n.text, server: server.text, username: u.text, password: p.text, psk: psk.text);
+      if (!mounted) return; Navigator.pop(ctx); await _load(); _snack(s.text('IPsec добавлен'));
+    }, child: Text(s.text('Добавить')))]));
   }
 
   void _showOvpnImport() {
     final n = TextEditingController(text: 'openvpn_client'), ctrl = TextEditingController();
-    showDialog(context: context, builder: (ctx) => AlertDialog(title: const Text('Импорт OpenVPN'), content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-      TextField(controller: n, decoration: const InputDecoration(labelText: 'Название')), TextField(controller: ctrl, maxLines: 6, decoration: const InputDecoration(labelText: 'Содержимое .ovpn')),
-    ])), actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')), FilledButton(onPressed: () async {
+    showDialog(context: context, builder: (ctx) => AlertDialog(title: Text(s.text('Импорт OpenVPN')), content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+      TextField(controller: n, decoration: InputDecoration(labelText: s.text('Название'))), TextField(controller: ctrl, maxLines: 6, decoration: InputDecoration(labelText: s.text('Содержимое .ovpn'))),
+    ])), actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: Text(s.text('Отмена'))), FilledButton(onPressed: () async {
       await widget.service.importOpenvpnConfig(name: n.text, ovpnContent: ctrl.text);
-      if (!mounted) return; Navigator.pop(ctx); await _load(); _snack('OpenVPN импортирован');
-    }, child: const Text('Импорт'))]));
+      if (!mounted) return; Navigator.pop(ctx); await _load(); _snack(s.text('OpenVPN импортирован'));
+    }, child: Text(s.text('Импорт'))) ]));
   }
 
   void _showAddDialog() {
@@ -299,16 +301,16 @@ class _VpnScreenState extends State<VpnScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSt) => AlertDialog(
-          title: const Text('Добавить WireGuard / AmneziaWG'),
+          title: Text(s.text('Добавить WireGuard / AmneziaWG')),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Название интерфейса')),
+                TextField(controller: nameCtrl, decoration: InputDecoration(labelText: s.text('Название интерфейса'))),
                 TextField(controller: privCtrl, decoration: const InputDecoration(labelText: 'Private key'), maxLines: 2),
-                TextField(controller: pubCtrl, decoration: const InputDecoration(labelText: 'Public key сервера'), maxLines: 2),
-                TextField(controller: addrCtrl, decoration: const InputDecoration(labelText: 'IP клиента')),
-                TextField(controller: endpCtrl, decoration: const InputDecoration(labelText: 'Сервер:порт')),
+                TextField(controller: pubCtrl, decoration: InputDecoration(labelText: s.text('Public key сервера')), maxLines: 2),
+                TextField(controller: addrCtrl, decoration: InputDecoration(labelText: s.text('IP клиента'))),
+                TextField(controller: endpCtrl, decoration: InputDecoration(labelText: s.text('Сервер:порт'))),
                 TextField(controller: allowedCtrl, decoration: const InputDecoration(labelText: 'Allowed IPs')),
                 TextField(controller: dnsCtrl, decoration: const InputDecoration(labelText: 'DNS')),
                 SwitchListTile(
@@ -320,7 +322,7 @@ class _VpnScreenState extends State<VpnScreen> {
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
+            TextButton(onPressed: () => Navigator.pop(ctx), child: Text(s.text('Отмена'))),
             FilledButton(
               onPressed: () async {
                 try {
@@ -339,10 +341,10 @@ class _VpnScreenState extends State<VpnScreen> {
                   await _load();
                 } catch (e) {
                   if (!mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${s.text('Ошибка')}: $e')));
                 }
               },
-              child: const Text('Добавить'),
+              child: Text(s.text('Добавить')),
             ),
           ],
         ),
@@ -352,6 +354,7 @@ class _VpnScreenState extends State<VpnScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
     final theme = Theme.of(context);
     return Scaffold(
       body: RefreshIndicator(
@@ -360,7 +363,7 @@ class _VpnScreenState extends State<VpnScreen> {
           physics: const BouncingScrollPhysics(),
           slivers: [
             SliverAppBar.large(
-              title: const Text('VPN'),
+              title: Text(s.vpn),
               actions: [
                 PopupMenuButton<String>(
                   icon: const Icon(Icons.more_vert),
@@ -381,8 +384,8 @@ class _VpnScreenState extends State<VpnScreen> {
                     const PopupMenuItem(value: 'add_l2tp', child: ListTile(leading: Icon(Icons.lan), title: Text('L2TP/IPsec'))),
                     const PopupMenuItem(value: 'add_pptp', child: ListTile(leading: Icon(Icons.cable), title: Text('PPTP'))),
                     const PopupMenuItem(value: 'add_sstp', child: ListTile(leading: Icon(Icons.https), title: Text('SSTP'))),
-                    const PopupMenuItem(value: 'import', child: ListTile(leading: Icon(Icons.file_open), title: Text('Импорт .conf (WG)'))),
-                    const PopupMenuItem(value: 'refresh', child: ListTile(leading: Icon(Icons.refresh), title: Text('Обновить'))),
+                    PopupMenuItem(value: 'import', child: ListTile(leading: const Icon(Icons.file_open), title: Text(s.text('Импорт .conf (WG)')))),
+                    PopupMenuItem(value: 'refresh', child: ListTile(leading: const Icon(Icons.refresh), title: Text(s.text('Обновить')))),
                   ],
                 ),
               ],
@@ -399,9 +402,9 @@ class _VpnScreenState extends State<VpnScreen> {
                     children: [
                       Icon(Icons.vpn_key_outlined, size: 80, color: theme.colorScheme.outline),
                       const SizedBox(height: 16),
-                      Text('VPN-интерфейсы не найдены', style: theme.textTheme.titleMedium),
+                      Text(s.text('VPN-интерфейсы не найдены'), style: theme.textTheme.titleMedium),
                       const SizedBox(height: 8),
-                      Text('Установите WireGuard / AmneziaWG или OpenVPN\nчерез кнопку "+"', textAlign: TextAlign.center, style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
+                      Text(s.text('Установите WireGuard / AmneziaWG или OpenVPN\nчерез кнопку "+"'), textAlign: TextAlign.center, style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
                     ],
                   ),
                 ),
@@ -440,13 +443,13 @@ trailing: _toggling == v.name
                                   Expanded(
                                     child: FilledButton.tonal(
                                       onPressed: v.enabled ? () => _enableDisable(v, false) : () => _enableDisable(v, true),
-                                      child: Text(v.enabled ? 'Отключить' : 'Включить'),
+                                      child: Text(v.enabled ? s.text('Отключить') : s.text('Включить')),
                                     ),
                                   ),
                                   IconButton(
                                     onPressed: () => _editVpn(v),
                                     icon: const Icon(Icons.edit),
-                                    tooltip: 'Редактировать',
+                                    tooltip: s.text('Редактировать'),
                                   ),
                                   IconButton(
                                     onPressed: () => _remove(v),
@@ -480,10 +483,10 @@ trailing: _toggling == v.name
             children: [
               Icon(Icons.error_outline, size: 64, color: theme.colorScheme.error),
               const SizedBox(height: 16),
-              Text('Ошибка', style: theme.textTheme.titleMedium),
+              Text(s.text('Ошибка'), style: theme.textTheme.titleMedium),
               Text(error!, textAlign: TextAlign.center),
               const SizedBox(height: 16),
-              FilledButton.tonal(onPressed: _load, child: const Text('Повторить')),
+              FilledButton.tonal(onPressed: _load, child: Text(s.text('Повторить'))),
             ],
           ),
         ),

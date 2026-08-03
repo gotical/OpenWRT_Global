@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/app_strings.dart';
 import '../models/network_info.dart';
 import '../services/openwrt_service.dart';
 
@@ -73,16 +74,17 @@ class _UsbBrowserScreenState extends State<UsbBrowserScreen> {
   }
 
   Future<void> _delete(Map<String, String> entry) async {
+    final s = AppStrings.of(context);
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Удалить файл?'),
-        content: Text('${entry['name']}\n\nЭто действие нельзя отменить.'),
+         title: Text(s.text('Удалить файл?')),
+         content: Text('${entry['name']}\n\n${s.text('Это действие нельзя отменить.')}'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
+           TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(s.cancel)),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Удалить', style: TextStyle(color: Colors.white)),
+             child: Text(s.text('Удалить'), style: const TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -92,11 +94,11 @@ class _UsbBrowserScreenState extends State<UsbBrowserScreen> {
     try {
       await widget.service.deleteUsbFile(full);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Удалено: ${entry['name']}')));
+       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${s.text('Удалено:')} ${entry['name']}')));
       _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
+       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${s.text('Ошибка')}: $e')));
     }
   }
 
@@ -105,11 +107,12 @@ class _UsbBrowserScreenState extends State<UsbBrowserScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final s = AppStrings.of(context);
     final dirs = _entries.where((e) => e['isDir'] == '1').toList();
     final files = _entries.where((e) => e['isDir'] != '1').toList();
     return Scaffold(
       appBar: AppBar(
-        title: Text(_folderName.isEmpty ? 'USB-накопитель' : _folderName),
+         title: Text(_folderName.isEmpty ? s.text('USB-накопитель') : _folderName),
       ),
       body: Column(
         children: [
@@ -120,7 +123,7 @@ class _UsbBrowserScreenState extends State<UsbBrowserScreen> {
                 IconButton(
                   onPressed: _canGoUp ? _goUp : null,
                   icon: const Icon(Icons.arrow_upward),
-                  tooltip: 'На уровень вверх',
+                   tooltip: s.text('На уровень вверх'),
                 ),
                 Expanded(
                   child: Padding(
@@ -136,7 +139,7 @@ class _UsbBrowserScreenState extends State<UsbBrowserScreen> {
                 IconButton(
                   onPressed: _load,
                   icon: const Icon(Icons.refresh),
-                  tooltip: 'Обновить',
+                   tooltip: s.text('Обновить'),
                 ),
               ],
             ),
@@ -161,7 +164,7 @@ class _UsbBrowserScreenState extends State<UsbBrowserScreen> {
                                 const SizedBox(height: 120),
                                 Icon(Icons.folder_open, size: 64, color: theme.colorScheme.outline),
                                 const SizedBox(height: 16),
-                                const Center(child: Text('Папка пуста')),
+                                 Center(child: Text(s.text('Папка пуста'))),
                               ],
                             )
                           : ListView.separated(
@@ -183,7 +186,7 @@ class _UsbBrowserScreenState extends State<UsbBrowserScreen> {
                                       ? const Icon(Icons.chevron_right)
                                       : IconButton(
                                           icon: const Icon(Icons.delete_outline),
-                                          tooltip: 'Удалить',
+                                           tooltip: s.text('Удалить'),
                                           onPressed: () => _delete(e),
                                         ),
                                   onTap: isDir ? () => _open(e) : () => _snack(e['name']!),

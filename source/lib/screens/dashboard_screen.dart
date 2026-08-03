@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
+import '../l10n/app_strings.dart';
 import '../models/system_info.dart';
 import '../services/openwrt_service.dart';
 import '../widgets/info_tile.dart';
@@ -91,10 +92,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         if (devs.isNotEmpty) {
           final scan = await widget.service.scanWifiChannels(devs.first.name);
           final maxCount = scan.values.isEmpty ? 0 : scan.values.reduce((a, b) => a > b ? a : b);
-          if (maxCount == 0) { interferenceLevel = 'Чисто'; interferenceColor = Colors.green; }
-          else if (maxCount <= 3) { interferenceLevel = 'Слабые'; interferenceColor = Colors.orange; }
-          else if (maxCount <= 6) { interferenceLevel = 'Средние'; interferenceColor = Colors.deepOrange; }
-          else { interferenceLevel = 'Сильные'; interferenceColor = Colors.red; }
+           if (maxCount == 0) { interferenceLevel = AppStrings.of(context).text('Чисто'); interferenceColor = Colors.green; }
+           else if (maxCount <= 3) { interferenceLevel = AppStrings.of(context).text('Слабые'); interferenceColor = Colors.orange; }
+           else if (maxCount <= 6) { interferenceLevel = AppStrings.of(context).text('Средние'); interferenceColor = Colors.deepOrange; }
+           else { interferenceLevel = AppStrings.of(context).text('Сильные'); interferenceColor = Colors.red; }
         }
       } catch (_) {}
 
@@ -124,19 +125,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
+    final s = AppStrings.of(context);
     return RefreshIndicator(onRefresh: _load, child: CustomScrollView(physics: const BouncingScrollPhysics(), slivers: [
-      SliverAppBar.large(title: const Text('Обзор'), actions: [IconButton(onPressed: _load, icon: const Icon(Icons.refresh))]),
+       SliverAppBar.large(title: Text(s.overview), actions: [IconButton(onPressed: _load, icon: const Icon(Icons.refresh))]),
       if (loading) const SliverFillRemaining(child: Center(child: CircularProgressIndicator()))
       else if (error != null) _err(t)
       else if (info != null) SliverPadding(padding: const EdgeInsets.symmetric(horizontal: 16), sliver: SliverList(delegate: SliverChildListDelegate([
         _header(t), const SizedBox(height: 12),
         _statusRow(t), const SizedBox(height: 8),
         _statusRow2(t), const SizedBox(height: 16),
-        Row(children: [Expanded(child: _stat(t, Icons.memory, 'CPU', '${(info!.cpuLoad*100).toStringAsFixed(1)}%', t.colorScheme.primary)), const SizedBox(width: 12), Expanded(child: _stat(t, Icons.storage, 'RAM', _h(info!.memoryUsed), t.colorScheme.tertiary, sub: 'из ${_h(info!.memoryTotal)}'))]),
+         Row(children: [Expanded(child: _stat(t, Icons.memory, 'CPU', '${(info!.cpuLoad*100).toStringAsFixed(1)}%', t.colorScheme.primary)), const SizedBox(width: 12), Expanded(child: _stat(t, Icons.storage, 'RAM', _h(info!.memoryUsed), t.colorScheme.tertiary, sub: '${s.text('из')} ${_h(info!.memoryTotal)}'))]),
         const SizedBox(height: 16),
-        _chart(t, 'Загрузка CPU (%)', _cpu, t.colorScheme.primary),
+         _chart(t, s.text('Загрузка CPU (%)'), _cpu, t.colorScheme.primary),
         const SizedBox(height: 12),
-        _chart(t, 'RAM (%)', _mem, t.colorScheme.tertiary),
+         _chart(t, 'RAM (%)', _mem, t.colorScheme.tertiary),
         const SizedBox(height: 24),
       ]))),
     ]));
@@ -152,26 +154,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ])),
         ]),
         const Divider(height: 24, color: Colors.white24),
-        InfoTile(icon: Icons.timer, label: 'Время работы', value: info!.uptime),
-        InfoTile(icon: Icons.system_update, label: 'Прошивка', value: info!.firmwareVersion),
+         InfoTile(icon: Icons.timer, label: AppStrings.of(context).text('Время работы'), value: info!.uptime),
+         InfoTile(icon: Icons.system_update, label: AppStrings.of(context).text('Прошивка'), value: info!.firmwareVersion),
       ]),
     ),
   ));
 
   Widget _statusRow(ThemeData t) => Row(children: [
-    _miniWidget(t, Icons.language, 'Интернет', internetOk ? 'Есть' : 'Нет', internetOk ? Colors.green : Colors.red, ip: internetOk ? publicIp : ''),
+     _miniWidget(t, Icons.language, AppStrings.of(context).text('Интернет'), internetOk ? AppStrings.of(context).text('Есть') : AppStrings.of(context).text('Нет'), internetOk ? Colors.green : Colors.red, ip: internetOk ? publicIp : ''),
     const SizedBox(width: 8),
-    _miniWidget(t, Icons.vpn_key, 'VPN', vpnStatus, vpnStatus != '—' ? t.colorScheme.secondary : t.colorScheme.outline, ip: vpnIp),
+     _miniWidget(t, Icons.vpn_key, 'VPN', vpnStatus, vpnStatus != '—' ? t.colorScheme.secondary : t.colorScheme.outline, ip: vpnIp),
     const SizedBox(width: 8),
-    _miniWidget(t, Icons.devices, 'Клиенты', '$totalClients', t.colorScheme.primary, sub: 'WiFi:$wifiClients LAN:$lanClients'),
+     _miniWidget(t, Icons.devices, AppStrings.of(context).clients, '$totalClients', t.colorScheme.primary, sub: 'WiFi:$wifiClients LAN:$lanClients'),
   ]);
 
   Widget _statusRow2(ThemeData t) => Row(children: [
     _miniWidget(t, Icons.dns, 'DNS', dnsServers, t.colorScheme.tertiary),
     const SizedBox(width: 8),
-    _miniWidget(t, Icons.wifi_tethering, 'Помехи', interferenceLevel, interferenceColor),
+     _miniWidget(t, Icons.wifi_tethering, AppStrings.of(context).text('Помехи'), interferenceLevel, interferenceColor),
     const SizedBox(width: 8),
-    _miniWidget(t, Icons.wifi, 'WiFi сети', wifi24Name != '—' ? '2.4: $wifi24Name' : '—', t.colorScheme.primary, sub: wifi5Name != '—' ? '5: $wifi5Name' : null),
+     _miniWidget(t, Icons.wifi, AppStrings.of(context).text('WiFi сети'), wifi24Name != '—' ? '2.4: $wifi24Name' : '—', t.colorScheme.primary, sub: wifi5Name != '—' ? '5: $wifi5Name' : null),
   ]);
 
   Widget _miniWidget(ThemeData t, IconData icon, String label, String value, Color color, {String? sub, String? ip}) => Expanded(
@@ -212,7 +214,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   );
 
   Widget _err(ThemeData t) => SliverFillRemaining(child: Center(child: Padding(padding: const EdgeInsets.all(24), child: Column(mainAxisSize: MainAxisSize.min, children: [
-    Icon(Icons.cloud_off, size: 72, color: t.colorScheme.error), const SizedBox(height: 16), Text('Ошибка подключения', style: t.textTheme.titleMedium),
-    Text(error!, textAlign: TextAlign.center, style: TextStyle(color: t.colorScheme.onSurfaceVariant)), const SizedBox(height: 20), FilledButton.tonal(onPressed: _load, child: const Text('Повторить')),
+     Icon(Icons.cloud_off, size: 72, color: t.colorScheme.error), const SizedBox(height: 16), Text(AppStrings.of(context).text('Ошибка подключения'), style: t.textTheme.titleMedium),
+     Text(error!, textAlign: TextAlign.center, style: TextStyle(color: t.colorScheme.onSurfaceVariant)), const SizedBox(height: 20), FilledButton.tonal(onPressed: _load, child: Text(AppStrings.of(context).text('Повторить'))),
   ]))));
 }

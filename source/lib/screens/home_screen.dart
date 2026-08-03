@@ -95,33 +95,33 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Row(children: [
+         title: Row(children: [
           Icon(Icons.verified_user_outlined),
           SizedBox(width: 10),
-          Text('Проверка SSH ключа'),
+           Text(AppStrings.of(context).text('Проверка SSH ключа')),
         ]),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Отпечаток (SHA256):'),
+             Text(AppStrings.of(context).text('Отпечаток (SHA256):')),
             const SizedBox(height: 10),
             SelectableText(
               fingerprint,
               style: const TextStyle(fontFamily: 'monospace'),
             ),
             const SizedBox(height: 12),
-            const Text('Принять ключ и сохранить для этого роутера?'),
+             Text(AppStrings.of(context).text('Принять ключ и сохранить для этого роутера?')),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Отмена'),
+             child: Text(AppStrings.of(context).text('Отмена')),
           ),
           FilledButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Принять'),
+             child: Text(AppStrings.of(context).text('Принять')),
           ),
         ],
       ),
@@ -178,7 +178,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       content: Row(children: [
         const Icon(Icons.add_circle, color: Colors.green),
         const SizedBox(width: 10),
-        Expanded(child: Text('Новое устройство: $name$ip')),
+        Expanded(child: Text('${AppStrings.of(context).text('Новое устройство')}: $name$ip')),
       ]),
       duration: const Duration(seconds: 4),
     ));
@@ -218,6 +218,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   void _showDepsDialog(String pkgManager, Map<String, bool> allDeps) {
+    final s = AppStrings.of(context);
     final isStock = (String k) => k == 'ubus' || k == 'uci' || k == 'jsonfilter' || k == 'dnsmasq';
     final entries = allDeps.entries.where((e) => !isStock(e.key)).toList();
     final missingEntries = entries.where((e) => !e.value).toList();
@@ -236,7 +237,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             title: Row(children: [
               const Icon(Icons.checklist_rtl),
               const SizedBox(width: 8),
-              Expanded(child: Text('Зависимости — $pkgManager', style: const TextStyle(fontSize: 17))),
+              Expanded(child: Text('${s.text('Зависимости —')} $pkgManager', style: const TextStyle(fontSize: 17))),
               Text('${entries.where((e) => e.value).length}/${entries.length}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
             ]),
             content: SingleChildScrollView(
@@ -278,7 +279,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   onChanged: installing ? null : (v) => setSt(() => dontShowAgain = v!),
                   contentPadding: EdgeInsets.zero,
                   controlAffinity: ListTileControlAffinity.leading,
-                  title: const Text('Больше не показывать это окно', style: TextStyle(fontSize: 13)),
+                  title: Text(s.text('Больше не показывать это окно'), style: const TextStyle(fontSize: 13)),
                 ),
               ]),
             ),
@@ -293,7 +294,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                         }
                         Navigator.pop(ctx);
                       },
-                child: const Text('Закрыть'),
+                child: Text(s.close),
               ),
               if (missingEntries.isNotEmpty)
                 FilledButton.icon(
@@ -312,38 +313,38 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                         if (isStock(e.key)) continue;
                         final primary = OpenWrtService.packageForDependency[e.key];
                         if (primary == null) continue;
-                        setSt(() { status[e.key] = 'downloading'; resultMsg = 'Загрузка $primary...'; });
+                         setSt(() { status[e.key] = 'downloading'; resultMsg = '${s.text('Загрузка')} $primary...'; });
                         try {
                           await service.installPackages([primary]);
-                          setSt(() { status[e.key] = 'done'; resultMsg = 'Готово $primary'; });
+                           setSt(() { status[e.key] = 'done'; resultMsg = '${s.text('Готово')} $primary'; });
                         } catch (_) {
                           try {
                             final alt = await service.findAlternativePackage(e.key);
                             if (alt != null && alt != primary) {
                               await service.installPackages([alt]);
-                              setSt(() { status[e.key] = 'done'; resultMsg = 'Готово $alt (альтернатива)'; });
+                               setSt(() { status[e.key] = 'done'; resultMsg = '${s.text('Готово')} $alt (${s.text('альтернатива')})'; });
                             } else {
                               rethrow;
                             }
                           } catch (_) {
-                            setSt(() { status[e.key] = 'error'; resultMsg = 'Ошибка $primary'; });
+                             setSt(() { status[e.key] = 'error'; resultMsg = '${s.text('Ошибка')} $primary'; });
                           }
                         }
                         await Future.delayed(const Duration(milliseconds: 300));
                       }
                       await service.disconnect();
-                      setSt(() { installing = false; resultMsg = 'Готово'; });
+                       setSt(() { installing = false; resultMsg = s.text('Готово'); });
                       await StorageService.markDepsChecked(widget.config.host);
                       await Future.delayed(const Duration(seconds: 2));
                       if (!mounted) return;
                       Navigator.pop(ctx);
                       _offerRebootAfterInstall();
                     } catch (e) {
-                      setSt(() { installing = false; resultMsg = 'Ошибка: $e'; });
+                       setSt(() { installing = false; resultMsg = '${s.text('Ошибка')}: $e'; });
                     }
                   },
                   icon: const Icon(Icons.download, size: 18),
-                  label: const Text('Установить'),
+                  label: Text(s.text('Установить')),
                 ),
             ],
           );
@@ -361,6 +362,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   void _showConnLogDialog(BuildContext outerCtx) {
+    final s = AppStrings.of(outerCtx);
     showDialog(
       context: outerCtx,
       builder: (ctx) => StatefulBuilder(
@@ -370,10 +372,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             title: Row(children: [
               const Icon(Icons.history),
               const SizedBox(width: 8),
-              const Expanded(child: Text('Недавние подключения')),
+              Expanded(child: Text(s.text('Недавние подключения'))),
               IconButton(
                 icon: const Icon(Icons.delete_outline, size: 20),
-                tooltip: 'Очистить',
+                 tooltip: AppStrings.of(context).text('Очистить'),
                 onPressed: () async {
                   await ClientMonitor.instance.clearLog();
                   if (ctx.mounted) setSt(() {});
@@ -383,9 +385,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             content: SizedBox(
               width: double.maxFinite,
               child: log.isEmpty
-                  ? const Padding(
+                   ? Padding(
                       padding: EdgeInsets.all(24),
-                      child: Text('Пока нет событий', textAlign: TextAlign.center),
+                      child: Text(s.text('Пока нет событий'), textAlign: TextAlign.center),
                     )
                   : ListView(
                       shrinkWrap: true,
@@ -401,7 +403,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     ),
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Закрыть')),
+              TextButton(onPressed: () => Navigator.pop(ctx), child: Text(s.close)),
             ],
           );
         },
@@ -410,13 +412,14 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   void _offerRebootAfterInstall() {
+    final s = AppStrings.of(context);
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Перезагрузить роутер?'),
-        content: const Text('Некоторые пакеты требуют перезагрузки.'),
+        title: Text(s.text('Перезагрузить роутер?')),
+        content: Text(s.text('Некоторые пакеты требуют перезагрузки.')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Позже')),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(s.text('Позже'))),
           FilledButton(
             onPressed: () async {
               Navigator.pop(ctx);
@@ -424,12 +427,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 await service.connect();
                 await service.reboot();
                 await service.disconnect();
-                if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Роутер перезагружается...')));
+                if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.text('Роутер перезагружается...'))));
               } catch (e) {
-                if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
+                 if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${s.text('Ошибка')}: $e')));
               }
             },
-            child: const Text('Перезагрузить'),
+            child: Text(s.text('Перезагрузить')),
           ),
         ],
       ),
@@ -458,7 +461,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           children: [
             Padding(
               padding: const EdgeInsets.all(16),
-              child: Text('Выбор роутера', style: Theme.of(ctx).textTheme.titleLarge),
+              child: Text(AppStrings.of(ctx).text('Выбор роутера'), style: Theme.of(ctx).textTheme.titleLarge),
             ),
             ...routers.map((r) => ListTile(
                   leading: const Icon(Icons.router),
@@ -474,7 +477,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 )),
             ListTile(
               leading: const Icon(Icons.logout),
-              title: const Text('Выйти на экран входа'),
+               title: Text(AppStrings.of(ctx).text('Выйти на экран входа')),
               onTap: () {
                 Navigator.pop(ctx);
                 Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const LoginScreen()));
@@ -513,7 +516,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               ),
               ListTile(
                 leading: const Icon(Icons.multiline_chart),
-                title: const Text('Мониторинг соединений'),
+                 title: Text(AppStrings.of(context).text('Мониторинг соединений')),
                 onTap: () {
                   Navigator.pop(context);
                   Navigator.of(context).push(MaterialPageRoute(builder: (_) => MonitorScreen(service: service)));
@@ -521,7 +524,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               ),
               ListTile(
                 leading: const Icon(Icons.swap_horiz),
-                title: const Text('Сменить роутер'),
+                 title: Text(AppStrings.of(context).text('Сменить роутер')),
                 onTap: () {
                   Navigator.pop(context);
                   _switchRouter();
@@ -529,7 +532,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               ),
               ListTile(
                 leading: const Icon(Icons.terminal),
-                title: const Text('Терминал (Beta)'),
+                 title: Text(AppStrings.of(context).text('Терминал (Beta)')),
                 onTap: () {
                   Navigator.pop(context);
                   Navigator.of(context).push(MaterialPageRoute(
@@ -556,8 +559,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               ),
               ListTile(
                 leading: const Icon(Icons.shield),
-                title: const Text('Фаервол'),
-                subtitle: const Text('Зоны, правила, проброс портов'),
+                 title: Text(AppStrings.of(context).text('Фаервол')),
+                 subtitle: Text(AppStrings.of(context).text('Зоны, правила, проброс портов')),
                 onTap: () {
                   Navigator.pop(context);
                   Navigator.of(context).push(MaterialPageRoute(
@@ -566,8 +569,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               ),
               ListTile(
                 leading: const Icon(Icons.settings_suggest),
-                title: const Text('Настройки'),
-                subtitle: const Text('Скрытие неработающих разделов'),
+                 title: Text(AppStrings.of(context).text('Настройки')),
+                 subtitle: Text(AppStrings.of(context).text('Скрытие неработающих разделов')),
                 onTap: () async {
                   final notifEnabled = await StorageService.isNotificationsEnabled();
                   if (!mounted) return;
@@ -578,7 +581,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                       builder: (ctx, setSt) {
                         var nf = notifEnabled;
                         return AlertDialog(
-                        title: const Text('Настройки'),
+                         title: Text(AppStrings.of(ctx).text('Настройки')),
                         content: SingleChildScrollView(
                           child: Column(mainAxisSize: MainAxisSize.min, children: [
                             SwitchListTile(
@@ -588,8 +591,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                 setState(() => _hideNonFunctional = v);
                                 await StorageService.setHideNonFunctionalSections(v);
                               },
-                              title: const Text('Скрывать неработающие разделы'),
-                              subtitle: const Text('Пункты, требующие неустановленные пакеты (nmap и др.)'),
+                               title: Text(AppStrings.of(ctx).text('Скрывать неработающие разделы')),
+                               subtitle: Text(AppStrings.of(ctx).text('Пункты, требующие неустановленные пакеты (nmap и др.)')),
                             ),
                             SwitchListTile(
                               value: nf,
@@ -599,13 +602,13 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                 await StorageService.setNotificationsEnabled(v);
                                 await ClientMonitor.instance.refreshNotificationsFlag();
                               },
-                              title: const Text('Уведомления о подключениях'),
-                              subtitle: const Text('Оповещать, когда к Wi-Fi подключается новое устройство (пока приложение открыто)'),
+                               title: Text(AppStrings.of(ctx).text('Уведомления о подключениях')),
+                               subtitle: Text(AppStrings.of(ctx).text('Оповещать, когда к Wi-Fi подключается новое устройство (пока приложение открыто)')),
                             ),
                             ListTile(
                               leading: const Icon(Icons.history),
-                              title: const Text('Недавние подключения'),
-                              subtitle: Text('${ClientMonitor.instance.log.length} событий'),
+                               title: Text(AppStrings.of(ctx).text('Недавние подключения')),
+                               subtitle: Text('${ClientMonitor.instance.log.length} ${AppStrings.of(ctx).text('событий')}'),
                               onTap: () {
                                 setSt(() {});
                                 _showConnLogDialog(ctx);
@@ -613,14 +616,14 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                             ),
 ListTile(
                               leading: const Icon(Icons.notifications_off_outlined),
-                              title: const Text('Вернуть напоминание о зависимостях'),
-                              subtitle: const Text('Показывать окно зависимостей при входе'),
+                               title: Text(AppStrings.of(ctx).text('Вернуть напоминание о зависимостях')),
+                               subtitle: Text(AppStrings.of(ctx).text('Показывать окно зависимостей при входе')),
                               onTap: () async {
                                 await StorageService.setDepsReminderHidden(false);
                                 await StorageService.resetDepsChecked(widget.config.host);
                                 setSt(() {});
                                 if (ctx.mounted) Navigator.pop(ctx);
-                                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Напоминание будет показано при следующем входе')));
+                                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppStrings.of(context).text('Напоминание будет показано при следующем входе'))));
                               },
                             ),
                           ]),
@@ -633,7 +636,7 @@ ListTile(
               ),
               ListTile(
                 leading: const Icon(Icons.info_outline),
-                title: const Text('О приложении'),
+                 title: Text(AppStrings.of(context).about),
                 onTap: () {
                   Navigator.pop(context);
                   Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AboutScreen()));
@@ -642,7 +645,7 @@ ListTile(
               const Spacer(),
               const Padding(
                 padding: EdgeInsets.all(16),
-                 child: Text('OPENWRT - Global v4.0.2\nРыбинскLAB', style: TextStyle(color: Colors.grey), textAlign: TextAlign.center),
+                  child: Text('OPENWRT - Global v4.0.3\nРыбинскLAB', style: TextStyle(color: Colors.grey), textAlign: TextAlign.center),
               ),
             ],
           ),
@@ -688,12 +691,12 @@ ListTile(
                     children: [
                       Icon(Icons.lock_outline, size: 64, color: Theme.of(context).colorScheme.primary),
                       const SizedBox(height: 24),
-                      const Text('Приложение заблокировано', style: TextStyle(fontSize: 18)),
+                       Text(AppStrings.of(context).text('Приложение заблокировано'), style: const TextStyle(fontSize: 18)),
                       const SizedBox(height: 16),
                       FilledButton.icon(
                         onPressed: _biometricUnlock,
                         icon: const Icon(Icons.fingerprint),
-                        label: const Text('Разблокировать'),
+                         label: Text(AppStrings.of(context).text('Разблокировать')),
                       ),
                     ],
                   ),

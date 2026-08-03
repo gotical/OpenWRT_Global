@@ -3,7 +3,7 @@
 Мобильное приложение для управления роутерами OpenWRT через SSH.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Release](https://img.shields.io/badge/release-v4.0.2-brightgreen)](https://github.com/gotical/OpenWRT_Global/releases/latest)
+[![Release](https://img.shields.io/badge/release-v4.0.3-brightgreen)](https://github.com/gotical/OpenWRT_Global/releases/latest)
 [![Android](https://img.shields.io/badge/Android-7.0%2B-green)](https://github.com/USAchevIP/OpenWRT_Global/releases/latest)
 
 🌐 [rybinsklab.ru/openwrt](https://rybinsklab.ru/openwrt/) | 📱 [4PDA](https://4pda.to/forum/index.php?showtopic=911457&view=findpost&p=144455263)
@@ -119,12 +119,12 @@ No LuCI or other web interfaces required on the router. Everything works through
 
 ---
 
-## Версия 4.0.2
+## Версия 4.0.3
 
-- Дададзены выбар мовы: руская, украінская, казахская і беларуская.
-- Дадана захаванне выбранай мовы паміж запусках.
-- Дададзены пераклады асноўнай навігацыі, экрана ўваходу і раздзела «Пра праграму».
-- Выпраўленыя залежнасці лакалізацыі Flutter і абноўлена версія APK.
+- Добавлен выбор языка: русский, украинский, казахский и белорусский.
+- Выбранный язык сохраняется между запусками приложения.
+- Переведены все экраны, основные диалоги, кнопки, уведомления и статусы.
+- Исправлены зависимости локализации Flutter и обновлена версия APK.
 
 ## Сборка / Build
 

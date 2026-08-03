@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/app_strings.dart';
 import '../models/channel_scan_result.dart';
 import '../services/openwrt_service.dart';
 import '../services/channel_analyzer.dart';
@@ -19,6 +20,7 @@ class ChannelAnalyzerScreen extends StatefulWidget {
 }
 
 class _ChannelAnalyzerScreenState extends State<ChannelAnalyzerScreen> {
+  AppStrings get s => AppStrings.of(context);
   ChannelAnalysis? _analysis;
   bool _loading = true;
   String? _error;
@@ -57,13 +59,13 @@ class _ChannelAnalyzerScreenState extends State<ChannelAnalyzerScreen> {
       }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Канал $channel${htMode != null ? ", $htMode" : ""} установлен')),
+           SnackBar(content: Text('${s.text('Канал установлен')}: $channel${htMode != null ? ", $htMode" : ""}')),
         );
         _init();
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
+         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${s.text('Ошибка')}: $e')));
       }
     }
   }
@@ -71,9 +73,10 @@ class _ChannelAnalyzerScreenState extends State<ChannelAnalyzerScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final s = AppStrings.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: Text('Анализатор — ${widget.deviceName}'),
+         title: Text('${s.text('Анализатор')} — ${widget.deviceName}'),
         actions: [
           IconButton(onPressed: _init, icon: const Icon(Icons.refresh)),
         ],
@@ -91,7 +94,7 @@ class _ChannelAnalyzerScreenState extends State<ChannelAnalyzerScreen> {
                         const SizedBox(height: 16),
                         Text(_error!, textAlign: TextAlign.center),
                         const SizedBox(height: 16),
-                        FilledButton.tonal(onPressed: _init, child: const Text('Повторить')),
+                         FilledButton.tonal(onPressed: _init, child: Text(s.text('Повторить'))),
                       ],
                     ),
                   ),
@@ -142,11 +145,11 @@ class _ChannelAnalyzerScreenState extends State<ChannelAnalyzerScreen> {
             const SizedBox(height: 12),
             Row(
               children: [
-                _infoChip(theme, 'Диапазон', a.band.toUpperCase()),
+                 _infoChip(theme, s.text('Диапазон'), a.band.toUpperCase()),
                 const SizedBox(width: 8),
-                _infoChip(theme, 'Текущий канал', '${a.currentChannel}'),
+                 _infoChip(theme, s.text('Текущий канал'), '${a.currentChannel}'),
                 const SizedBox(width: 8),
-                _infoChip(theme, 'Ширина', a.currentHtMode),
+                 _infoChip(theme, s.text('Ширина'), a.currentHtMode),
               ],
             ),
             const SizedBox(height: 8),
@@ -154,11 +157,11 @@ class _ChannelAnalyzerScreenState extends State<ChannelAnalyzerScreen> {
               children: [
                 Icon(Icons.phone_android, size: 16, color: phoneCount > 0 ? Colors.green : Colors.grey),
                 const SizedBox(width: 4),
-                Text('Телефон: $phoneCount сетей', style: theme.textTheme.bodySmall),
+                 Text('${s.text('Телефон:')} $phoneCount ${s.text('сетей')}', style: theme.textTheme.bodySmall),
                 const SizedBox(width: 16),
                 Icon(Icons.router, size: 16, color: routerCount > 0 ? Colors.green : Colors.grey),
                 const SizedBox(width: 4),
-                Text('Роутер: $routerCount сетей', style: theme.textTheme.bodySmall),
+                 Text('${s.text('Роутер:')} $routerCount ${s.text('сетей')}', style: theme.textTheme.bodySmall),
               ],
             ),
           ],
@@ -192,7 +195,7 @@ class _ChannelAnalyzerScreenState extends State<ChannelAnalyzerScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Целевая ширина канала', style: theme.textTheme.titleSmall),
+             Text(s.text('Целевая ширина канала'), style: theme.textTheme.titleSmall),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
@@ -240,14 +243,14 @@ class _ChannelAnalyzerScreenState extends State<ChannelAnalyzerScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(children: [
-              Text('Спектр каналов', style: theme.textTheme.titleSmall),
+               Text(s.text('Спектр каналов'), style: theme.textTheme.titleSmall),
               const Spacer(),
-              _legendDot(Colors.blue, 'Роутер'),
+               _legendDot(Colors.blue, s.text('Роутер')),
               const SizedBox(width: 12),
-              _legendDot(Colors.orange, 'Телефон'),
+               _legendDot(Colors.orange, s.text('Телефон')),
             ]),
             const SizedBox(height: 4),
-            Text('Ширина учтена (20/40/80/160 MHz)', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+             Text(s.text('Ширина учтена (20/40/80/160 MHz)'), style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
             const SizedBox(height: 12),
             SizedBox(
               height: 200,
@@ -271,7 +274,7 @@ class _ChannelAnalyzerScreenState extends State<ChannelAnalyzerScreen> {
                       children: [
                         SizedBox(
                           width: 70,
-                          child: Text('К $ch', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+                           child: Text('${s.text('К')} $ch', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
                         ),
                         Expanded(
                           child: Column(
@@ -360,7 +363,7 @@ class _ChannelAnalyzerScreenState extends State<ChannelAnalyzerScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Рекомендации', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
+             Text(s.text('Рекомендации'), style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
             Row(
               children: [
@@ -368,7 +371,7 @@ class _ChannelAnalyzerScreenState extends State<ChannelAnalyzerScreen> {
                   child: _recommendTile(
                     theme,
                     icon: Icons.tune,
-                    label: 'Канал',
+                     label: s.text('Канал'),
                     value: '$best',
                     color: Colors.green,
                     onTap: () => _applyChannel(best, null),
@@ -379,7 +382,7 @@ class _ChannelAnalyzerScreenState extends State<ChannelAnalyzerScreen> {
                   child: _recommendTile(
                     theme,
                     icon: Icons.height,
-                    label: 'Ширина',
+                     label: s.text('Ширина'),
                     value: htMode,
                     color: Colors.blue,
                     onTap: () => _applyChannel(a.currentChannel, htMode),
@@ -389,7 +392,7 @@ class _ChannelAnalyzerScreenState extends State<ChannelAnalyzerScreen> {
             ),
             const SizedBox(height: 12),
             if (a.recommendedChannels.length > 1) ...[
-              Text('Другие свободные каналы:', style: theme.textTheme.bodySmall),
+               Text(s.text('Другие свободные каналы:'), style: theme.textTheme.bodySmall),
               const SizedBox(height: 4),
               Wrap(
                 spacing: 6,
@@ -397,7 +400,7 @@ class _ChannelAnalyzerScreenState extends State<ChannelAnalyzerScreen> {
                 children: a.recommendedChannels.take(6).map((ch) {
                   final isBest = ch == best;
                   return ActionChip(
-                    label: Text('К $ch', style: TextStyle(fontSize: 12, fontWeight: isBest ? FontWeight.bold : FontWeight.normal)),
+                     label: Text('${s.text('К')} $ch', style: TextStyle(fontSize: 12, fontWeight: isBest ? FontWeight.bold : FontWeight.normal)),
                     onPressed: isBest ? null : () => _applyChannel(ch, htMode),
                     visualDensity: VisualDensity.compact,
                   );
@@ -412,7 +415,7 @@ class _ChannelAnalyzerScreenState extends State<ChannelAnalyzerScreen> {
                   child: OutlinedButton.icon(
                     onPressed: () => _applyChannel(best, htMode),
                     icon: const Icon(Icons.check_circle, size: 18),
-                    label: const Text('Применить'),
+                     label: Text(s.text('Применить')),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -420,7 +423,7 @@ class _ChannelAnalyzerScreenState extends State<ChannelAnalyzerScreen> {
                   child: OutlinedButton.icon(
                     onPressed: () => _applyChannel(0, null), // auto
                     icon: const Icon(Icons.auto_fix_high, size: 18),
-                    label: const Text('Авто'),
+                     label: Text(s.text('Авто')),
                   ),
                 ),
               ],
@@ -465,7 +468,7 @@ class _ChannelAnalyzerScreenState extends State<ChannelAnalyzerScreen> {
             Row(children: [
               Icon(Icons.phone_android, size: 18, color: Colors.orange),
               const SizedBox(width: 6),
-              Text('Сканирование с телефона (${a.phoneScans.length})', style: theme.textTheme.titleSmall),
+               Text('${s.text('Сканирование с телефона')} (${a.phoneScans.length})', style: theme.textTheme.titleSmall),
             ]),
             const SizedBox(height: 8),
             ...a.phoneScans.take(20).map((s) => _scanTile(s, theme)),
@@ -486,7 +489,7 @@ class _ChannelAnalyzerScreenState extends State<ChannelAnalyzerScreen> {
             Row(children: [
               Icon(Icons.router, size: 18, color: Colors.blue),
               const SizedBox(width: 6),
-              Text('Сканирование с роутера (${a.routerScans.length})', style: theme.textTheme.titleSmall),
+               Text('${s.text('Сканирование с роутера')} (${a.routerScans.length})', style: theme.textTheme.titleSmall),
             ]),
             const SizedBox(height: 8),
             ...a.routerScans.take(20).map((s) => _scanTile(s, theme)),
@@ -523,7 +526,7 @@ class _ChannelAnalyzerScreenState extends State<ChannelAnalyzerScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(s.ssid.isNotEmpty ? s.ssid : '(скрытая)', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                 Text(s.ssid.isNotEmpty ? s.ssid : '(${AppStrings.of(context).text('скрытая')})', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
                 Text('К${s.channel}$chRange • $widthLabel • ${s.bssid.length >= 8 ? s.bssid.substring(0, 8) : s.bssid}...',
                     style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurfaceVariant)),
               ],

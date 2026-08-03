@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/app_strings.dart';
 import 'package:flutter/services.dart';
 import '../services/openwrt_service.dart';
 
@@ -121,13 +122,13 @@ class _MacChangerScreenState extends State<MacChangerScreen> {
       await _loadMacInfo(iface);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('MAC $iface изменён на $newMac'), backgroundColor: Colors.green.shade700),
+           SnackBar(content: Text('MAC $iface ${AppStrings.of(context).text('изменён на')} $newMac'), backgroundColor: Colors.green.shade700),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Ошибка: $e'), backgroundColor: Colors.red.shade700),
+           SnackBar(content: Text('${AppStrings.of(context).text('Ошибка')}: $e'), backgroundColor: Colors.red.shade700),
         );
       }
     } finally {
@@ -137,9 +138,10 @@ class _MacChangerScreenState extends State<MacChangerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('MAC Changer')),
+      appBar: AppBar(title: Text(s.text('MAC Changer'))),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
@@ -147,7 +149,7 @@ class _MacChangerScreenState extends State<MacChangerScreen> {
                   Icon(Icons.error_outline, size: 48, color: theme.colorScheme.error),
                   const SizedBox(height: 16),
                   Text(_error!, textAlign: TextAlign.center),
-                  FilledButton.tonal(onPressed: _load, child: const Text('Повторить')),
+                   FilledButton.tonal(onPressed: _load, child: Text(AppStrings.of(context).text('Повторить'))),
                 ]))
               : ListView(
                   padding: const EdgeInsets.all(16),
@@ -158,7 +160,7 @@ class _MacChangerScreenState extends State<MacChangerScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('Интерфейс', style: theme.textTheme.titleSmall),
+                             Text(s.text('Интерфейс'), style: theme.textTheme.titleSmall),
                             const SizedBox(height: 8),
                             DropdownButtonFormField<String>(
                               value: _selectedIface,
@@ -182,15 +184,15 @@ class _MacChangerScreenState extends State<MacChangerScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            _infoRow('Текущий MAC', _currentMac, theme),
-                            _infoRow('Постоянный MAC', _permanentMac, theme),
-                            if (_vendor.isNotEmpty) _infoRow('Вендор', _vendor, theme),
+                             _infoRow(s.text('Текущий MAC'), _currentMac, theme),
+                             _infoRow(s.text('Постоянный MAC'), _permanentMac, theme),
+                             if (_vendor.isNotEmpty) _infoRow(s.text('Вендор'), _vendor, theme),
                           ],
                         ),
                       ),
                     ),
                     const SizedBox(height: 16),
-                    Text('Быстрый выбор', style: theme.textTheme.titleSmall),
+                     Text(s.text('Быстрый выбор'), style: theme.textTheme.titleSmall),
                     const SizedBox(height: 8),
                     Wrap(
                       spacing: 6,
@@ -208,7 +210,7 @@ class _MacChangerScreenState extends State<MacChangerScreen> {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    Text('Произвольный MAC', style: theme.textTheme.titleSmall),
+                     Text(s.text('Произвольный MAC'), style: theme.textTheme.titleSmall),
                     const SizedBox(height: 8),
                     Row(
                       children: [
@@ -229,7 +231,7 @@ class _MacChangerScreenState extends State<MacChangerScreen> {
                           onPressed: _changing ? null : () => _changeMac(_randomMac()),
                           child: _changing
                               ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                              : const Text('Применить'),
+                               : Text(s.text('Применить')),
                         ),
                       ],
                     ),
@@ -248,7 +250,7 @@ class _MacChangerScreenState extends State<MacChangerScreen> {
           IconButton(
             icon: const Icon(Icons.copy, size: 16),
             onPressed: () => Clipboard.setData(ClipboardData(text: value)),
-            tooltip: 'Копировать',
+             tooltip: AppStrings.of(context).text('Копировать'),
           ),
         ],
       ),

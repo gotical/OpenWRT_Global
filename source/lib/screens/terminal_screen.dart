@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/material.dart';
+import '../l10n/app_strings.dart';
 import '../services/openwrt_service.dart';
 
 class TerminalScreen extends StatefulWidget {
@@ -32,10 +33,11 @@ class _TerminalScreenState extends State<TerminalScreen> {
   }
 
   Future<void> _connectShell() async {
+    final s = AppStrings.of(context);
     try {
       final client = widget.service.sshClient;
       if (client == null) {
-        _appendOutput('SSH не подключён. Переподключитесь.\n');
+         _appendOutput('${s.text('SSH не подключён. Переподключитесь.')}\n');
         return;
       }
       _session = await client.shell(
@@ -46,8 +48,8 @@ class _TerminalScreenState extends State<TerminalScreen> {
         ),
       );
       _connected = true;
-      _appendOutput('=== Терминал OpenWRT Global (Beta) ===\r\n');
-      _appendOutput('Для выхода закройте экран\r\n\r\n');
+       _appendOutput('=== ${s.text('Терминал (Beta)')} OpenWRT Global ===\r\n');
+       _appendOutput('${s.text('Для выхода закройте экран')}\r\n\r\n');
 
       _stdoutSub = _session!.stdout.listen((data) {
         _appendOutput(utf8.decode(data));
@@ -58,13 +60,13 @@ class _TerminalScreenState extends State<TerminalScreen> {
       _session!.done.then((_) {
         if (mounted) {
           setState(() => _connected = false);
-          _appendOutput('\r\n=== Соединение закрыто ===\r\n');
+           _appendOutput('\r\n=== ${s.text('Соединение закрыто')} ===\r\n');
         }
       }).catchError((_) {
         if (mounted) setState(() => _connected = false);
       });
     } catch (e) {
-      _appendOutput('Ошибка подключения: $e\n');
+       _appendOutput('${s.text('Ошибка подключения')}: $e\n');
     }
   }
 
@@ -88,7 +90,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
     try {
       _session!.stdin.add(utf8.encode('$cmd\n'));
     } catch (e) {
-      _appendOutput('Ошибка: $e\n');
+       _appendOutput('${AppStrings.of(context).text('Ошибка')}: $e\n');
     }
   }
 
@@ -105,7 +107,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
     _session?.close();
     _session = null;
     _connected = false;
-    setState(() => _output += '\r\n=== Отключено ===\r\n');
+     setState(() => _output += '\r\n=== ${AppStrings.of(context).text('Отключено')} ===\r\n');
   }
 
   void _clear() {
@@ -135,20 +137,21 @@ class _TerminalScreenState extends State<TerminalScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final s = AppStrings.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Терминал (Beta)'),
+         title: Text(s.text('Терминал (Beta)')),
         actions: [
           IconButton(
             icon: const Icon(Icons.clear_all),
             onPressed: _clear,
-            tooltip: 'Очистить',
+             tooltip: s.text('Очистить'),
           ),
           if (_connected)
             IconButton(
               icon: const Icon(Icons.link_off),
               onPressed: _disconnect,
-              tooltip: 'Отключиться',
+               tooltip: s.text('Отключиться'),
             ),
         ],
       ),
@@ -194,7 +197,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
                     enabled: _connected,
                     style: const TextStyle(fontFamily: 'monospace', fontSize: 14),
                     decoration: InputDecoration(
-                      hintText: _connected ? 'Введите команду...' : 'Терминал не подключён',
+                       hintText: _connected ? s.text('Введите команду...') : s.text('Терминал не подключён'),
                       isDense: true,
                       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
@@ -216,7 +219,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
                           }
                         }
                       : null,
-                  tooltip: 'История ↑',
+                   tooltip: s.text('История ↑'),
                 ),
                 FilledButton(
                   onPressed: _connected && _input.text.isNotEmpty

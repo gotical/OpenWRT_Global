@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/app_strings.dart';
 import '../models/package_info.dart';
 import '../services/openwrt_service.dart';
 
@@ -12,6 +13,7 @@ class PackagesScreen extends StatefulWidget {
 }
 
 class _PackagesScreenState extends State<PackagesScreen> {
+  String _t(String source) => AppStrings.of(context).text(source);
   Map<String, dynamic>? _diskInfo;
   List<PackageInfo> installed = [];
   List<PackageInfo> searchResults = [];
@@ -70,19 +72,19 @@ class _PackagesScreenState extends State<PackagesScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => const AlertDialog(
-        content: Row(children: [CircularProgressIndicator(), SizedBox(width: 16), Text('Обновление списков...')]),
+       builder: (ctx) => AlertDialog(
+          content: Row(children: [const CircularProgressIndicator(), const SizedBox(width: 16), Text(_t('Обновление списков...'))]),
       ),
     );
     try {
       await widget.service.updatePackageLists();
       if (!mounted) return;
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Списки пакетов обновлены')));
+       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_t('Списки пакетов обновлены'))));
     } catch (e) {
       if (!mounted) return;
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
+       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${_t('Ошибка')}: $e')));
     }
   }
 
@@ -90,26 +92,26 @@ class _PackagesScreenState extends State<PackagesScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Установить пакет?'),
+         title: Text(_t('Установить пакет?')),
         content: Text('${pkg.name} ${pkg.version}'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Установить')),
+           TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(_t('Отмена'))),
+           FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(_t('Установить'))),
         ],
       ),
     );
     if (ok != true) return;
-    _showProgress('Установка ${pkg.name}...');
+    _showProgress('${_t('Установка')} ${pkg.name}...');
     try {
       await widget.service.installPackage(pkg.name);
       if (!mounted) return;
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${pkg.name} установлен')));
+       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${pkg.name} ${_t('установлен')}')));
       await _load();
     } catch (e) {
       if (!mounted) return;
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
+       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${_t('Ошибка')}: $e')));
     }
   }
 
@@ -117,26 +119,26 @@ class _PackagesScreenState extends State<PackagesScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Удалить пакет?'),
+         title: Text(_t('Удалить пакет?')),
         content: Text('${pkg.name} ${pkg.version}'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Удалить')),
+           TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(_t('Отмена'))),
+           FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(_t('Удалить'))),
         ],
       ),
     );
     if (ok != true) return;
-    _showProgress('Удаление ${pkg.name}...');
+    _showProgress('${_t('Удаление')} ${pkg.name}...');
     try {
       await widget.service.removePackage(pkg.name);
       if (!mounted) return;
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${pkg.name} удалён')));
+       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${pkg.name} ${_t('удалён')}')));
       await _load();
     } catch (e) {
       if (!mounted) return;
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
+       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${_t('Ошибка')}: $e')));
     }
   }
 
@@ -152,6 +154,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
     final theme = Theme.of(context);
     return DefaultTabController(
       length: 3,
@@ -159,17 +162,17 @@ class _PackagesScreenState extends State<PackagesScreen> {
         body: NestedScrollView(
           headerSliverBuilder: (ctx, innerBoxIsScrolled) => [
             SliverAppBar.large(
-              title: const Text('Пакеты'),
+              title: Text(s.packages),
               actions: [
                 IconButton(onPressed: _updateLists, icon: const Icon(Icons.download)),
                 IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
               ],
               bottom: TabBar(
                 onTap: (i) => setState(() => _tabIndex = i),
-                tabs: const [
-                  Tab(icon: Icon(Icons.check_circle), text: 'Установленные'),
-                  Tab(icon: Icon(Icons.fact_check), text: 'Нужные'),
-                  Tab(icon: Icon(Icons.search), text: 'Поиск'),
+               tabs: [
+                   Tab(icon: const Icon(Icons.check_circle), text: _t('Установленные')),
+                   Tab(icon: const Icon(Icons.fact_check), text: _t('Нужные')),
+                   Tab(icon: const Icon(Icons.search), text: _t('Поиск')),
                 ],
               ),
             ),
@@ -208,7 +211,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
                   Row(children: [
                     const Icon(Icons.storage, size: 20),
                     const SizedBox(width: 8),
-                    Text('Память overlay', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+                     Text(_t('Память overlay'), style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
                     const Spacer(),
                     Text('${usedPercent.toStringAsFixed(0)}%', style: TextStyle(color: usedPercent > 85 ? Colors.red : theme.colorScheme.primary, fontWeight: FontWeight.w700)),
                   ]),
@@ -223,7 +226,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Text('Свободно: ${d['free'] ?? '-'} • Занято: ${d['used'] ?? '-'} • Всего: ${d['total'] ?? '-'}',
+                   Text('${_t('Свободно:')} ${d['free'] ?? '-'} • ${_t('Занято:')} ${d['used'] ?? '-'} • ${_t('Всего:')} ${d['total'] ?? '-'}',
                     style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
                 ]),
               ),
@@ -286,10 +289,10 @@ class _PackagesScreenState extends State<PackagesScreen> {
               String subtitle = '';
               String installPkg = pn ?? '';
               if (!ok) {
-                if (rs == 'in_repo') { subtitle = '→ $pn (в репозитории)'; }
-                else if (rs != null && rs.startsWith('alt:')) { subtitle = '→ ${rs.substring(4)} (альтернатива)'; installPkg = rs.substring(4); }
-                else if (rs == 'missing') { subtitle = 'Нет в репозитории'; installPkg = ''; }
-                else { subtitle = 'проверка...'; }
+                 if (rs == 'in_repo') { subtitle = '→ $pn (${_t('в репозитории')})'; }
+                 else if (rs != null && rs.startsWith('alt:')) { subtitle = '→ ${rs.substring(4)} (${_t('альтернатива')})'; installPkg = rs.substring(4); }
+                 else if (rs == 'missing') { subtitle = _t('Нет в репозитории'); installPkg = ''; }
+                 else { subtitle = _t('проверка...'); }
               }
               return Card(
                 margin: const EdgeInsets.only(bottom: 8),
@@ -301,12 +304,12 @@ class _PackagesScreenState extends State<PackagesScreen> {
                     onPressed: () async {
                       try {
                         await widget.service.installPackages([installPkg]);
-                        if (mounted) { setState(() {}); ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$installPkg установлен'))); }
+                         if (mounted) { setState(() {}); ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$installPkg ${_t('установлен')}'))); }
                       } catch (e) {
-                        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
+                         if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${_t('Ошибка')}: $e')));
                       }
                     },
-                    child: const Text('Уст.'),
+                     child: Text(_t('Уст.')),
                   ),
                 ),
               );
@@ -324,7 +327,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
           padding: const EdgeInsets.all(16),
           child: SearchBar(
             controller: _searchCtrl,
-            hintText: 'Название пакета',
+             hintText: _t('Название пакета'),
             leading: const Icon(Icons.search),
             trailing: [
               if (_searchCtrl.text.isNotEmpty)
@@ -354,7 +357,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
                     subtitle: Text('${p.version}${p.description != null ? '\n${p.description}' : ''}'),
                     isThreeLine: p.description != null,
                     trailing: isInstalled
-                        ? const Chip(label: Text('Установлен'), visualDensity: VisualDensity.compact)
+                         ? Chip(label: Text(_t('Установлен')), visualDensity: VisualDensity.compact)
                         : IconButton(
                             icon: const Icon(Icons.download, color: Colors.green),
                             onPressed: () => _install(p),
@@ -377,10 +380,10 @@ class _PackagesScreenState extends State<PackagesScreen> {
           children: [
             Icon(Icons.error_outline, size: 64, color: theme.colorScheme.error),
             const SizedBox(height: 16),
-            Text('Ошибка', style: theme.textTheme.titleMedium),
+             Text(_t('Ошибка'), style: theme.textTheme.titleMedium),
             Text(error!, textAlign: TextAlign.center),
             const SizedBox(height: 16),
-            FilledButton.tonal(onPressed: _load, child: const Text('Повторить')),
+             FilledButton.tonal(onPressed: _load, child: Text(_t('Повторить'))),
           ],
         ),
       ),

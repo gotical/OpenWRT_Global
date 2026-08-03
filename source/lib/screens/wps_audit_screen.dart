@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/app_strings.dart';
 import '../services/openwrt_service.dart';
 import '../services/local_wifi_scanner.dart';
 
@@ -90,12 +91,13 @@ class _WpsAuditScreenState extends State<WpsAuditScreen> {
 
   Future<void> _scanRouter() async {
     if (_device == null) return;
-    setState(() { _loading = true; _status = 'Сканирование эфира с роутера...'; });
+    final s = AppStrings.of(context);
+    setState(() { _loading = true; _status = s.text('Сканирование эфира с роутера...'); });
 
     String iface = _device!;
     try {
       iface = (await _getIface(_device!)) ?? _device!;
-      if (mounted) setState(() => _status = 'Сканирование через $iface...');
+       if (mounted) setState(() => _status = '${s.text('Сканирование через')} $iface...');
 
       final raw = await widget.service.runCommand('iw dev $iface scan 2>/dev/null || echo ""');
       final networks = <_WifiScanEntry>[];
@@ -134,13 +136,13 @@ class _WpsAuditScreenState extends State<WpsAuditScreen> {
           _networks = networks;
           _loading = false;
           _status = networks.isEmpty
-              ? 'Сетей не найдено (попробуйте телефонное сканирование)'
-              : 'Найдено сетей: ${networks.length}';
+               ? s.text('Сетей не найдено (попробуйте телефонное сканирование)')
+               : '${s.text('Найдено сетей:')} ${networks.length}';
         });
       }
     } catch (e) {
       if (mounted) {
-        setState(() { _loading = false; _status = 'Ошибка роутера: $e'; });
+        setState(() { _loading = false; _status = '${s.text('Ошибка роутера:')} $e'; });
       }
     }
   }
@@ -149,7 +151,7 @@ class _WpsAuditScreenState extends State<WpsAuditScreen> {
     final bssid = cur['bssid'] ?? '';
     if (bssid.isEmpty) return;
     networks.add(_WifiScanEntry(
-      ssid: cur['ssid'] ?? '(скрытая)',
+       ssid: cur['ssid'] ?? '(${AppStrings.of(context).text('скрытая')})',
       bssid: bssid,
       signal: int.tryParse(cur['signal'] ?? '-100') ?? -100,
       channel: int.tryParse(cur['channel'] ?? '0') ?? 0,
@@ -158,7 +160,8 @@ class _WpsAuditScreenState extends State<WpsAuditScreen> {
   }
 
   Future<void> _scanPhone() async {
-    setState(() { _loading = true; _status = 'Сканирование эфира с телефона...'; });
+    final s = AppStrings.of(context);
+    setState(() { _loading = true; _status = s.text('Сканирование эфира с телефона...'); });
     final scanStatus = await LocalWifiScanner.scan();
     final networks = <_WifiScanEntry>[];
     if (scanStatus.success) {
@@ -167,7 +170,7 @@ class _WpsAuditScreenState extends State<WpsAuditScreen> {
         if (seen.contains(s.bssid)) continue;
         seen.add(s.bssid);
         networks.add(_WifiScanEntry(
-          ssid: s.ssid.isNotEmpty ? s.ssid : '(скрытая)',
+           ssid: s.ssid.isNotEmpty ? s.ssid : '(${AppStrings.of(context).text('скрытая')})',
           bssid: s.bssid,
           signal: s.signalStrength,
           channel: s.channel,
@@ -182,8 +185,8 @@ class _WpsAuditScreenState extends State<WpsAuditScreen> {
         _status = !scanStatus.success
             ? scanStatus.message
             : networks.isEmpty
-                ? 'Сетей не найдено (телефон)'
-                : 'Найдено сетей: ${networks.length} (телефон)';
+                 ? s.text('Сетей не найдено (телефон)')
+                 : '${s.text('Найдено сетей:')} ${networks.length} (телефон)';
       });
     }
   }
@@ -199,20 +202,21 @@ class _WpsAuditScreenState extends State<WpsAuditScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('WPS Audit'),
+        title: Text(s.text('WPS Audit')),
         actions: [
           IconButton(
             onPressed: _loading ? null : _scanRouter,
             icon: const Icon(Icons.router),
-            tooltip: 'Сканировать с роутера',
+            tooltip: s.text('Сканирование с роутера'),
           ),
           IconButton(
             onPressed: _loading ? null : _scanPhone,
             icon: const Icon(Icons.phone_android),
-            tooltip: 'Сканировать с телефона',
+            tooltip: s.text('Сканирование с телефона'),
           ),
         ],
       ),
@@ -242,10 +246,10 @@ class _WpsAuditScreenState extends State<WpsAuditScreen> {
                       children: [
                         Icon(Icons.wifi_find, size: 64, color: theme.colorScheme.outline),
                         const SizedBox(height: 16),
-                        Text('Сканируйте эфир', style: theme.textTheme.titleMedium),
+                        Text(s.text('Сканируйте эфир'), style: theme.textTheme.titleMedium),
                         const SizedBox(height: 8),
                         Text(
-                          'Сканирование с роутера — через iw dev\nСканирование с телефона — через WiFi API',
+                          s.text('Сканирование с роутера — через iw dev\nСканирование с телефона — через WiFi API'),
                           textAlign: TextAlign.center,
                           style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 13),
                         ),
@@ -270,12 +274,12 @@ class _WpsAuditScreenState extends State<WpsAuditScreen> {
       child: ListTile(
         onTap: () => _selectNetwork(n),
         leading: Icon(
-          n.encryptionType == 'Открытая' ? Icons.wifi : Icons.lock,
-          color: n.encryptionType == 'Открытая' ? Colors.orange : theme.colorScheme.primary,
+           n.encryptionType == 'Открытая' ? Icons.wifi : Icons.lock,
+           color: n.encryptionType == 'Открытая' ? Colors.orange : theme.colorScheme.primary,
         ),
         title: Text(n.ssid, style: const TextStyle(fontWeight: FontWeight.w600)),
         subtitle: Text(
-          '${n.bssid} • К${n.channel} • ${n.encryptionType}',
+           '${n.bssid} • К${n.channel} • ${AppStrings.of(context).text(n.encryptionType)}',
           style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurfaceVariant, fontFamily: 'monospace'),
         ),
         trailing: Container(
@@ -315,15 +319,16 @@ class _NetworkDetailSheetState extends State<_NetworkDetailSheet> {
   }
 
   Future<void> _checkSecurity() async {
+    final s = AppStrings.of(context);
     setState(() { _checking = true; _checkResult = null; });
     try {
       final n = widget.network;
       final lines = <String>[];
 
-      lines.add('Точка: ${n.ssid}');
+       lines.add('${s.text('Точка:')} ${n.ssid}');
       lines.add('BSSID: ${n.bssid}');
-      lines.add('Канал: ${n.channel}');
-      lines.add('Шифрование: ${n.encryptionType}');
+       lines.add('${s.text('Канал:')} ${n.channel}');
+       lines.add('${s.text('Шифрование:')} ${s.text(n.encryptionType)}');
 
       // Проверка WPS с роутера (iw scan)
       final wpsInfo = await _checkWpsFromRouter(n);
@@ -333,38 +338,39 @@ class _NetworkDetailSheetState extends State<_NetworkDetailSheet> {
       final enc = n.encryptionType;
       final securityIssues = <String>[];
       if (enc == 'Открытая') {
-        securityIssues.add('⚠ Открытая сеть — любой может подключиться');
+         securityIssues.add('⚠ ${s.text('Открытая сеть — любой может подключиться')}');
       } else if (enc == 'WEP') {
-        securityIssues.add('⚠ WEP — легко взломать за минуты');
+         securityIssues.add('⚠ ${s.text('WEP — легко взломать за минуты')}');
       }
       if (wpsInfo.any((l) => l.contains('WPS: Открыт') || l.contains('WPS: включён'))) {
-        securityIssues.add('⚠ WPS включён без блокировки — возможна атака Pixie Dust');
-        securityIssues.add('  Рекомендация: отключить WPS или включить блокировку после 3 попыток');
+         securityIssues.add('⚠ ${s.text('WPS включён без блокировки — возможна атака Pixie Dust')}');
+         securityIssues.add('  ${s.text('Рекомендация: отключить WPS или включить блокировку после 3 попыток')}');
       }
       if (enc == 'WPA2') {
-        securityIssues.add('✓ WPA2 — хороший уровень защиты (используйте сложный пароль)');
+         securityIssues.add('✓ ${s.text('WPA2 — хороший уровень защиты (используйте сложный пароль)')}');
       }
       if (enc == 'WPA3') {
-        securityIssues.add('✓ WPA3 — максимальный уровень защиты');
+         securityIssues.add('✓ ${s.text('WPA3 — максимальный уровень защиты')}');
       }
 
       if (securityIssues.isEmpty) {
-        lines.add('\nИтог: безопасность не определена');
+         lines.add('\n${s.text('Итог: безопасность не определена')}');
       } else {
-        lines.add('\nРезультат проверки:');
+         lines.add('\n${s.text('Результат проверки:')}');
         lines.addAll(securityIssues);
       }
 
       setState(() { _checkResult = lines.join('\n'); _checking = false; });
     } catch (e) {
-      setState(() { _checkResult = 'Ошибка: $e'; _checking = false; });
+       setState(() { _checkResult = '${s.text('Ошибка')}: $e'; _checking = false; });
     }
   }
 
   Future<List<String>> _checkWpsFromRouter(_WifiScanEntry target) async {
+    final s = AppStrings.of(context);
     try {
       final devs = await widget.service.fetchWirelessDevices();
-      if (devs.isEmpty) return ['WPS: не удалось проверить (нет радио)'];
+       if (devs.isEmpty) return ['WPS: ${s.text('не удалось проверить (нет радио)')}'];
       final radio = devs.first.name;
 
       // Получаем интерфейс для сканирования
@@ -380,37 +386,38 @@ class _NetworkDetailSheetState extends State<_NetworkDetailSheet> {
       } catch (_) {}
 
       final raw = await widget.service.runCommand('iw dev $iface scan 2>/dev/null | grep -A 20 "BSS ${target.bssid}" || echo ""');
-      if (raw.isEmpty) return ['WPS: точка не найдена в эфире роутера'];
+       if (raw.isEmpty) return ['WPS: ${s.text('точка не найдена в эфире роутера')}'];
 
       final hasWps = raw.contains('WPS:');
       final locked = raw.contains('Version: 1.0') && raw.contains('0x15');
       if (hasWps) {
         return locked
-            ? ['WPS: Заблокирован (после неудачных попыток)', 'Pixie Dust: защита от атаки включена']
-            : ['WPS: Открыт (уязвим)', 'Pixie Dust: ВОЗМОЖНА АТАКА — рекомендуем отключить WPS'];
+             ? ['WPS: ${s.text('Заблокирован (после неудачных попыток)')}', 'Pixie Dust: ${s.text('защита от атаки включена')}']
+             : ['WPS: ${s.text('Открыт (уязвим)')}', 'Pixie Dust: ${s.text('ВОЗМОЖНА АТАКА — рекомендуем отключить WPS')}'];
       }
-      return ['WPS: не поддерживается'];
+       return ['WPS: ${s.text('не поддерживается')}'];
     } catch (e) {
-      return ['WPS: ошибка проверки ($e)'];
+       return ['WPS: ${s.text('ошибка проверки')}: $e'];
     }
   }
 
   Future<void> _connectAsClient() async {
+    final s = AppStrings.of(context);
     if (_passCtrl.text.isEmpty) {
       setState(() {
-        _checkResult = 'Введите пароль сети';
+         _checkResult = s.text('Введите пароль сети');
       });
       return;
     }
     setState(() { _connecting = true; _checkResult = null; });
     try {
       final devs = await widget.service.fetchWirelessDevices();
-      if (devs.isEmpty) throw Exception('Радио не найдено');
+       if (devs.isEmpty) throw Exception(s.text('Радио не найдено'));
       final radio = devs.first.name;
       await widget.service.wifiClientConnect(radio, widget.network.ssid, _passCtrl.text);
-      setState(() { _connecting = false; _checkResult = 'Подключено! Роутер теперь клиент этой сети (WAN)'; });
+       setState(() { _connecting = false; _checkResult = s.text('Подключено! Роутер теперь клиент этой сети (WAN)'); });
     } catch (e) {
-      setState(() { _connecting = false; _checkResult = 'Ошибка подключения: $e'; });
+       setState(() { _connecting = false; _checkResult = '${s.text('Ошибка подключения')}: $e'; });
     }
   }
 
@@ -464,8 +471,8 @@ class _NetworkDetailSheetState extends State<_NetworkDetailSheet> {
                 ],
               ),
               const SizedBox(height: 8),
-              Text('Шифрование: ${n.encryptionType}',
-                  style: TextStyle(fontSize: 13, color: n.encryptionType == 'Открытая' ? Colors.orange : theme.colorScheme.primary, fontWeight: FontWeight.w600)),
+               Text('${AppStrings.of(context).text('Шифрование:')} ${AppStrings.of(context).text(n.encryptionType)}',
+                   style: TextStyle(fontSize: 13, color: n.encryptionType == 'Открытая' ? Colors.orange : theme.colorScheme.primary, fontWeight: FontWeight.w600)),
               const SizedBox(height: 16),
 
               // Проверка безопасности
@@ -476,7 +483,7 @@ class _NetworkDetailSheetState extends State<_NetworkDetailSheet> {
                   icon: _checking
                       ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                       : const Icon(Icons.security),
-                  label: const Text('Проверить безопасность (WPS / Pixie Dust)'),
+                   label: Text(AppStrings.of(context).text('Проверить безопасность (WPS / Pixie Dust)')),
                 ),
               ),
               const SizedBox(height: 12),
@@ -485,9 +492,9 @@ class _NetworkDetailSheetState extends State<_NetworkDetailSheet> {
               TextField(
                 controller: _passCtrl,
                 obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'Пароль сети',
-                  hintText: 'Для подключения роутера как клиента',
+                 decoration: InputDecoration(
+                   labelText: AppStrings.of(context).text('Пароль сети'),
+                   hintText: AppStrings.of(context).text('Для подключения роутера как клиента'),
                   prefixIcon: Icon(Icons.key),
                 ),
               ),
@@ -499,7 +506,7 @@ class _NetworkDetailSheetState extends State<_NetworkDetailSheet> {
                   icon: _connecting
                       ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                       : const Icon(Icons.wifi_tethering),
-                  label: Text(_connectingAsClient ? 'Подключение...' : 'Подключить роутер к этой сети'),
+                   label: Text(_connectingAsClient ? AppStrings.of(context).text('Подключение...') : AppStrings.of(context).text('Подключить роутер к этой сети')),
                 ),
               ),
 

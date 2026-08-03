@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import '../l10n/app_strings.dart';
 import '../models/network_info.dart';
 import '../services/openwrt_service.dart';
 
@@ -13,6 +14,7 @@ class NetworkScreen extends StatefulWidget {
 }
 
 class _NetworkScreenState extends State<NetworkScreen> {
+  String _t(String source) => AppStrings.of(context).text(source);
   List<NetworkInterface> interfaces = [];
   bool loading = true;
   String? error;
@@ -52,7 +54,7 @@ class _NetworkScreenState extends State<NetworkScreen> {
     try {
       await widget.service.runCommand('uci delete wireless.@wifi-iface[-1] 2>/dev/null; uci commit wireless; wifi reload');
       await _load();
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('WiFi-клиент отключён')));
+       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_t('WiFi-клиент отключён'))));
     } catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e'))); }
   }
 
@@ -61,7 +63,7 @@ class _NetworkScreenState extends State<NetworkScreen> {
     await showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Выберите провайдера'),
+         title: Text(_t('Выберите провайдера')),
         content: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             ...OpenWrtService.russianProviders.entries.map((e) => ListTile(
@@ -84,30 +86,30 @@ class _NetworkScreenState extends State<NetworkScreen> {
       final ok = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('PPPoE — логин и пароль'),
+           title: Text(_t('PPPoE — логин и пароль')),
           content: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextField(controller: user, decoration: const InputDecoration(labelText: 'Логин')),
+             TextField(controller: user, decoration: InputDecoration(labelText: _t('Логин'))),
             const SizedBox(height: 8),
-            TextField(controller: pass, decoration: const InputDecoration(labelText: 'Пароль'), obscureText: true),
+             TextField(controller: pass, decoration: InputDecoration(labelText: _t('Пароль')), obscureText: true),
           ]),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Применить')),
+             TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(_t('Отмена'))),
+             FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(_t('Применить'))),
           ],
         ),
       );
       if (ok == true) {
         await widget.service.configureWan(provider!, username: user.text, password: pass.text);
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('WAN настроен, сеть перезапускается...')));
+         if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_t('WAN настроен, сеть перезапускается...'))));
       }
     } else {
       await widget.service.configureWan(provider!);
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('WAN настроен (DHCP) — сеть перезапускается')));
+       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_t('WAN настроен (DHCP) — сеть перезапускается'))));
     }
   }
 
   Future<void> _showTopology() async {
-    showDialog(context: context, barrierDismissible: false, builder: (ctx) => const AlertDialog(content: Row(children: [CircularProgressIndicator(), SizedBox(width: 16), Text('Сканирование сети...')])));
+     showDialog(context: context, barrierDismissible: false, builder: (ctx) => AlertDialog(content: Row(children: [const CircularProgressIndicator(), const SizedBox(width: 16), Text(_t('Сканирование сети...'))])));
     try {
       final devices = await widget.service.fetchTopology();
       if (!mounted) return;
@@ -115,7 +117,7 @@ class _NetworkScreenState extends State<NetworkScreen> {
       showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: Row(children: [const Icon(Icons.account_tree), const SizedBox(width: 8), Text('Топология (${devices.length})')]),
+           title: Row(children: [const Icon(Icons.account_tree), const SizedBox(width: 8), Text('${_t('Топология')} (${devices.length})')]),
           content: SizedBox(
             width: double.maxFinite,
             child: ListView.builder(
@@ -142,7 +144,7 @@ class _NetworkScreenState extends State<NetworkScreen> {
   }
 
   Future<void> _speedtest() async {
-    showDialog(context: context, barrierDismissible: false, builder: (ctx) => const AlertDialog(content: Row(children: [CircularProgressIndicator(), SizedBox(width: 16), Text('Проверка speedtest...')])));
+     showDialog(context: context, barrierDismissible: false, builder: (ctx) => AlertDialog(content: Row(children: [const CircularProgressIndicator(), const SizedBox(width: 16), Text(_t('Проверка speedtest...'))])));
     try {
       await widget.service.connect();
       // Проверяем все доступные методы (Cloudflare-тест работает через curl)
@@ -159,19 +161,19 @@ class _NetworkScreenState extends State<NetworkScreen> {
         final install = await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
-            title: const Text('Не найдены инструменты замера'),
-            content: const Text('Установить curl и iperf3?\n\n'
-                'curl — универсальный тест через Cloudflare (точки в РФ/СНГ/ЕС)\n'
-                'iperf3 — точный замер в обе стороны\n\n'
-                'Также доступны: speedtest-netperf, wget'),
+             title: Text(_t('Не найдены инструменты замера')),
+             content: Text('${_t('Установить curl и iperf3?')}\n\n'
+                 '${_t('curl — универсальный тест через Cloudflare (точки в РФ/СНГ/ЕС)')}\n'
+                 '${_t('iperf3 — точный замер в обе стороны')}\n\n'
+                 '${_t('Также доступны: speedtest-netperf, wget')}'),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
-              FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Установить curl + iperf3')),
+               TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(_t('Отмена'))),
+               FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(_t('Установить curl + iperf3'))),
             ],
           ),
         );
         if (install != true) return;
-        showDialog(context: context, barrierDismissible: false, builder: (ctx) => const AlertDialog(content: Row(children: [CircularProgressIndicator(), SizedBox(width: 16), Text('Установка curl и iperf3...')])));
+         showDialog(context: context, barrierDismissible: false, builder: (ctx) => AlertDialog(content: Row(children: [const CircularProgressIndicator(), const SizedBox(width: 16), Text(_t('Установка curl и iperf3...'))])));
         try {
           await widget.service.installPackages(['curl', 'iperf3']);
           if (!mounted) return;
@@ -179,12 +181,12 @@ class _NetworkScreenState extends State<NetworkScreen> {
         } catch (e) {
           if (!mounted) return;
           Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка установки: $e')));
+           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${_t('Ошибка установки')}: $e')));
           return;
         }
       }
 
-      showDialog(context: context, barrierDismissible: false, builder: (ctx) => const AlertDialog(content: Row(children: [CircularProgressIndicator(), SizedBox(width: 16), Text('Speedtest... (~20-40 сек)')])));
+       showDialog(context: context, barrierDismissible: false, builder: (ctx) => AlertDialog(content: Row(children: [const CircularProgressIndicator(), const SizedBox(width: 16), Text(_t('Speedtest... (~20-40 сек)'))])));
       final result = await widget.service.runSpeedtest();
       if (!mounted) return;
       Navigator.pop(context);
@@ -199,7 +201,7 @@ class _NetworkScreenState extends State<NetworkScreen> {
     } catch (e) {
       if (!mounted) return;
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
+       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${_t('Ошибка')}: $e')));
     }
   }
 
@@ -210,11 +212,11 @@ class _NetworkScreenState extends State<NetworkScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSt) => AlertDialog(
-          title: const Text('Ping'),
+           title: const Text('Ping'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(controller: ctrl, decoration: const InputDecoration(labelText: 'Хост')),
+               TextField(controller: ctrl, decoration: InputDecoration(labelText: _t('Хост'))),
               if (result != null) ...[
                 const SizedBox(height: 12),
                 SizedBox(
@@ -226,15 +228,15 @@ class _NetworkScreenState extends State<NetworkScreen> {
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Закрыть')),
+             TextButton(onPressed: () => Navigator.pop(ctx), child: Text(_t('Закрыть'))),
             FilledButton(
               onPressed: () async {
-                setSt(() => result = 'Проверка...');
+                 setSt(() => result = _t('Проверка...'));
                 try {
                   final res = await widget.service.pingHost(ctrl.text.trim());
                   setSt(() => result = res);
                 } catch (e) {
-                  setSt(() => result = 'Ошибка: $e');
+                   setSt(() => result = '${_t('Ошибка')}: $e');
                 }
               },
               child: const Text('Ping'),
@@ -247,6 +249,7 @@ class _NetworkScreenState extends State<NetworkScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
     final theme = Theme.of(context);
     return Scaffold(
       body: RefreshIndicator(
@@ -254,12 +257,12 @@ class _NetworkScreenState extends State<NetworkScreen> {
         child: CustomScrollView(
           slivers: [
             SliverAppBar.large(
-              title: const Text('Сеть'),
+              title: Text(s.network),
               actions: [
                 PopupMenuButton<String>(onSelected: (v) { if (v == 'speedtest') _speedtest(); if (v == 'ping') _ping(); if (v == 'wan') _setupWan(); if (v == 'topology') _showTopology(); },
                   itemBuilder: (ctx) => [
-                    const PopupMenuItem(value: 'topology', child: ListTile(leading: Icon(Icons.account_tree), title: Text('Топология сети'))),
-                    const PopupMenuItem(value: 'wan', child: ListTile(leading: Icon(Icons.settings_ethernet), title: Text('Настроить WAN'))),
+                     PopupMenuItem(value: 'topology', child: ListTile(leading: const Icon(Icons.account_tree), title: Text(_t('Топология сети')))),
+                     PopupMenuItem(value: 'wan', child: ListTile(leading: const Icon(Icons.settings_ethernet), title: Text(_t('Настроить WAN')))),
                     const PopupMenuItem(value: 'speedtest', child: ListTile(leading: Icon(Icons.speed), title: Text('Speedtest'))),
                     const PopupMenuItem(value: 'ping', child: ListTile(leading: Icon(Icons.network_ping), title: Text('Ping'))),
                   ],
@@ -286,7 +289,7 @@ class _NetworkScreenState extends State<NetworkScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text('Публичный IP', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                                 Text(_t('Публичный IP'), style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
                                 Text(
                                   publicIp.isEmpty ? '—' : publicIp,
                                   style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
@@ -312,10 +315,10 @@ class _NetworkScreenState extends State<NetworkScreen> {
                           const Icon(Icons.wifi, color: Colors.orange, size: 28),
                           const SizedBox(width: 12),
                           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            Text('Интернет через Wi-Fi', style: theme.textTheme.bodySmall?.copyWith(color: Colors.orange)),
+                             Text(_t('Интернет через Wi-Fi'), style: theme.textTheme.bodySmall?.copyWith(color: Colors.orange)),
                             Text(wifiWanSsid!, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
                           ])),
-                          OutlinedButton.icon(onPressed: _disconnectWifiWan, icon: const Icon(Icons.link_off), label: const Text('Откл.'), style: OutlinedButton.styleFrom(foregroundColor: Colors.orange)),
+                           OutlinedButton.icon(onPressed: _disconnectWifiWan, icon: const Icon(Icons.link_off), label: Text(_t('Откл.')), style: OutlinedButton.styleFrom(foregroundColor: Colors.orange)),
                         ]),
                       ),
                     ),
@@ -345,9 +348,9 @@ class _NetworkScreenState extends State<NetworkScreen> {
                                   _row('IP', iface.ipAddresses?.join('\n') ?? '—'),
                                   if ((iface.ipv6Addresses ?? const []).isNotEmpty)
                                     _row('IPv6', (iface.ipv6Addresses ?? const []).join('\n')),
-                                  _row('Шлюз', iface.gateway ?? '—'),
+                                   _row(_t('Шлюз'), iface.gateway ?? '—'),
                                   _row('DNS', iface.dns ?? '—'),
-                                  _row('Трафик', iface.bytesHuman),
+                                   _row(_t('Трафик'), iface.bytesHuman),
                                 ],
                               ),
                             ),
@@ -391,10 +394,10 @@ class _NetworkScreenState extends State<NetworkScreen> {
             children: [
               Icon(Icons.error_outline, size: 64, color: theme.colorScheme.error),
               const SizedBox(height: 16),
-              Text('Ошибка', style: theme.textTheme.titleMedium),
+               Text(_t('Ошибка'), style: theme.textTheme.titleMedium),
               Text(error!, textAlign: TextAlign.center),
               const SizedBox(height: 16),
-              FilledButton.tonal(onPressed: _load, child: const Text('Повторить')),
+               FilledButton.tonal(onPressed: _load, child: Text(_t('Повторить'))),
             ],
           ),
         ),

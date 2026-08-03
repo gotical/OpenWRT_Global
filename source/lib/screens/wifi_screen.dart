@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../l10n/app_strings.dart';
 import '../models/wifi_info.dart';
 import '../services/openwrt_service.dart';
 import '../services/local_wifi_scanner.dart';
@@ -17,6 +18,7 @@ class WifiScreen extends StatefulWidget {
 }
 
 class _WifiScreenState extends State<WifiScreen> {
+  AppStrings get s => AppStrings.of(context);
   List<WifiDevice> devices = [];
   List<WifiNetwork> networks = [];
   Map<String, List<int>> availableChannels = {};
@@ -74,7 +76,7 @@ class _WifiScreenState extends State<WifiScreen> {
       showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: Text('Помехи — ${dev.name}'),
+          title: Text('${s.text('Помехи')} — ${dev.name}'),
           content: SizedBox(
             width: double.maxFinite,
             child: Column(
@@ -82,9 +84,9 @@ class _WifiScreenState extends State<WifiScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(children: [
-                  _legendDot(Colors.green, 'Свободно'), const SizedBox(width: 8),
-                  _legendDot(Colors.orange, 'Средне'), const SizedBox(width: 8),
-                  _legendDot(Colors.red, 'Занято'),
+                  _legendDot(Colors.green, s.text('Свободно')), const SizedBox(width: 8),
+                  _legendDot(Colors.orange, s.text('Средне')), const SizedBox(width: 8),
+                  _legendDot(Colors.red, s.text('Занято')),
                 ]),
                 const SizedBox(height: 12),
                 SizedBox(
@@ -101,7 +103,7 @@ class _WifiScreenState extends State<WifiScreen> {
                       return Padding(
                         padding: const EdgeInsets.symmetric(vertical: 3),
                         child: Row(children: [
-                          SizedBox(width: 60, child: Text('К $channel', style: const TextStyle(fontWeight: FontWeight.w600))),
+                           SizedBox(width: 60, child: Text('${s.text('К')} $channel', style: const TextStyle(fontWeight: FontWeight.w600))),
                           Expanded(
                             child: Container(
                               height: 18,
@@ -124,7 +126,7 @@ class _WifiScreenState extends State<WifiScreen> {
                             ),
                           ),
                           const SizedBox(width: 8),
-                          Text('$count сетей', style: TextStyle(color: Theme.of(ctx).textTheme.bodySmall?.color)),
+                           Text('$count ${s.text('сетей')}', style: TextStyle(color: Theme.of(ctx).textTheme.bodySmall?.color)),
                         ]),
                       );
                     },
@@ -155,11 +157,11 @@ class _WifiScreenState extends State<WifiScreen> {
     try {
       await widget.service.wifiReload();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Wi-Fi перезагружен')));
+       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.text('Wi-Fi перезагружен'))));
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
+       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${s.text('Ошибка')}: $e')));
     } finally {
       if (mounted) setState(() => processing.remove('reload'));
     }
@@ -175,14 +177,14 @@ class _WifiScreenState extends State<WifiScreen> {
       setState(() => processing.remove('wps_${dev.name}'));
       if (!ok) {
         ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Не удалось запустить WPS (нужен wpad с поддержкой WPS)')));
+             SnackBar(content: Text(s.text('Не удалось запустить WPS (нужен wpad с поддержкой WPS)'))));
         return;
       }
       await _showWpsCountdown(dev.name, iface);
     } catch (e) {
       if (!mounted) return;
       setState(() => processing.remove('wps_${dev.name}'));
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
+       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${s.text('Ошибка')}: $e')));
     }
   }
 
@@ -240,13 +242,13 @@ class _WifiScreenState extends State<WifiScreen> {
           final remain = (total - DateTime.now().difference(started).inSeconds).clamp(0, total);
           final theme = Theme.of(ctx);
           return AlertDialog(
-            title: Text(finished ? 'Устройство подключено' : 'WPS подключение'),
+             title: Text(finished ? s.text('Устройство подключено') : s.text('WPS подключение')),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(finished ? Icons.check_circle : Icons.wifi_tethering, size: 52, color: finished ? Colors.green : Colors.orange),
                 const SizedBox(height: 12),
-                Text(finished ? 'Клиент полностью подключился к сети' : 'Нажмите кнопку WPS на подключаемом устройстве'),
+                 Text(finished ? s.text('Клиент полностью подключился к сети') : s.text('Нажмите кнопку WPS на подключаемом устройстве')),
                 const SizedBox(height: 16),
                 if (finished && joined != null) ...[
                   Card(
@@ -293,11 +295,11 @@ class _WifiScreenState extends State<WifiScreen> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Text('секунд до конца окна', style: theme.textTheme.bodySmall),
+                   Text(s.text('секунд до конца окна'), style: theme.textTheme.bodySmall),
                 ],
                 const SizedBox(height: 8),
                 Text(
-                  finished ? 'Окно WPS будет закрыто' : '$devName ($iface) • устройств: $joinedCount',
+                   finished ? s.text('Окно WPS будет закрыто') : '$devName ($iface) • ${s.text('устройств')}: $joinedCount',
                   style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                 ),
               ],
@@ -310,7 +312,7 @@ class _WifiScreenState extends State<WifiScreen> {
                   widget.service.wpsCancel(iface);
                   Navigator.pop(ctx);
                 },
-                child: Text(finished ? 'Готово' : 'Отменить'),
+                child: Text(finished ? s.text('Готово') : s.text('Отменить')),
               ),
             ],
           );
@@ -328,7 +330,7 @@ class _WifiScreenState extends State<WifiScreen> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
+       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${s.text('Ошибка')}: $e')));
     } finally {
       if (mounted) setState(() => processing.remove(net.section));
     }
@@ -342,18 +344,18 @@ class _WifiScreenState extends State<WifiScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSt) => AlertDialog(
-          title: const Text('Настройки сети'),
+          title: Text(s.text('Настройки сети')),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextField(controller: ssidCtrl, decoration: const InputDecoration(labelText: 'Название сети (SSID)')),
+                TextField(controller: ssidCtrl, decoration: InputDecoration(labelText: s.text('Название сети (SSID)'))),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   initialValue: encryption,
-                  decoration: const InputDecoration(labelText: 'Защита'),
-                  items: const [
-                    DropdownMenuItem(value: 'none', child: Text('Открытая')),
+                  decoration: InputDecoration(labelText: s.text('Защита')),
+                   items: [
+                     DropdownMenuItem(value: 'none', child: Text(s.text('Открытая'))),
                     DropdownMenuItem(value: 'psk2', child: Text('WPA2-PSK')),
                     DropdownMenuItem(value: 'psk2+ccmp', child: Text('WPA2-PSK/CCMP')),
                     DropdownMenuItem(value: 'sae', child: Text('WPA3-SAE')),
@@ -366,7 +368,7 @@ class _WifiScreenState extends State<WifiScreen> {
                   const SizedBox(height: 12),
                   TextField(
                     controller: keyCtrl,
-                    decoration: const InputDecoration(labelText: 'Пароль (оставьте пустым, чтобы не менять)'),
+                     decoration: InputDecoration(labelText: s.text('Пароль (оставьте пустым, чтобы не менять)')),
                     obscureText: true,
                   ),
                 ],
@@ -374,7 +376,7 @@ class _WifiScreenState extends State<WifiScreen> {
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
+            TextButton(onPressed: () => Navigator.pop(ctx), child: Text(s.text('Отмена'))),
             FilledButton(
               onPressed: () async {
                 try {
@@ -389,10 +391,10 @@ class _WifiScreenState extends State<WifiScreen> {
                   await _load();
                 } catch (e) {
                   if (!mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
+                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${s.text('Ошибка')}: $e')));
                 }
               },
-              child: const Text('Сохранить'),
+              child: Text(s.text('Сохранить')),
             ),
           ],
         ),
@@ -419,7 +421,7 @@ class _WifiScreenState extends State<WifiScreen> {
       await showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: Text('Ширина канала ${dev.name}'),
+           title: Text('${s.text('Ширина канала')} ${dev.name}'),
           content: SizedBox(
             width: double.maxFinite,
             child: ListView.builder(
@@ -432,8 +434,8 @@ class _WifiScreenState extends State<WifiScreen> {
                 return ListTile(
                   leading: Icon(isCurrent ? Icons.radio_button_checked : Icons.radio_button_off, color: isRec ? Colors.green : Theme.of(ctx).colorScheme.outline),
                   title: Text(m, style: TextStyle(fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w400)),
-                  subtitle: isRec ? const Text('Рекомендуется', style: TextStyle(color: Colors.green, fontSize: 11)) : null,
-                  trailing: isCurrent ? Chip(label: const Text('Установлена', style: TextStyle(fontSize: 10)), visualDensity: VisualDensity.compact, backgroundColor: Colors.green.withValues(alpha: 0.1)) : null,
+                   subtitle: isRec ? Text(s.text('Рекомендуется'), style: const TextStyle(color: Colors.green, fontSize: 11)) : null,
+                   trailing: isCurrent ? Chip(label: Text(s.text('Установлена'), style: const TextStyle(fontSize: 10)), visualDensity: VisualDensity.compact, backgroundColor: Colors.green.withValues(alpha: 0.1)) : null,
                   onTap: () { sel = m; Navigator.pop(ctx); },
                 );
               },
@@ -446,7 +448,7 @@ class _WifiScreenState extends State<WifiScreen> {
       await widget.service.setWifiHtMode(dev.name, sel!);
       await _load();
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
+         if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${s.text('Ошибка')}: $e')));
     } finally {
       if (mounted) setState(() => processing.remove('ht_${dev.name}'));
     }
@@ -460,7 +462,7 @@ class _WifiScreenState extends State<WifiScreen> {
     await showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Канал ${dev.name}'),
+         title: Text('${s.text('Канал')} ${dev.name}'),
         content: SizedBox(
           width: double.maxFinite,
           child: ListView.builder(
@@ -472,8 +474,8 @@ class _WifiScreenState extends State<WifiScreen> {
               final color = count == 0 ? Colors.green : (count < 3 ? Colors.orange : Colors.red);
               return ListTile(
                 leading: Icon(Icons.circle, color: color, size: 14),
-                title: Text('Канал $ch'),
-                subtitle: Text(count == 0 ? 'Нет помех' : '$count сетей'),
+                 title: Text('${s.text('Канал')} $ch'),
+                 subtitle: Text(count == 0 ? s.text('Нет помех') : '$count ${s.text('сетей')}'),
                 trailing: selected == ch ? const Icon(Icons.check) : null,
                 onTap: () {
                   selected = ch;
@@ -493,7 +495,7 @@ class _WifiScreenState extends State<WifiScreen> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
+       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${s.text('Ошибка')}: $e')));
     } finally {
       if (mounted) setState(() => processing.remove('ch_${dev.name}'));
     }
@@ -505,17 +507,17 @@ class _WifiScreenState extends State<WifiScreen> {
       final best = await widget.service.recommendChannel(dev.name);
       if (!mounted) return;
       if (best == null) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Не удалось просканировать сети')));
+         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.text('Не удалось просканировать сети'))));
         return;
       }
       final ok = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('Рекомендуемый канал'),
-          content: Text('Установить канал $best для ${dev.name}?'),
+           title: Text(s.text('Рекомендуемый канал')),
+           content: Text('${s.text('Установить канал')} $best ${s.text('для')} ${dev.name}?'),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Установить')),
+             TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(s.text('Отмена'))),
+             FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(s.text('Установить'))),
           ],
         ),
       );
@@ -525,7 +527,7 @@ class _WifiScreenState extends State<WifiScreen> {
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
+       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${s.text('Ошибка')}: $e')));
     } finally {
       if (mounted) setState(() => processing.remove('auto_${dev.name}'));
     }
@@ -538,13 +540,13 @@ class _WifiScreenState extends State<WifiScreen> {
       if (!mounted) return;
       setState(() => processing.remove('scan_${dev.name}'));
       if (nets.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Сети не найдены')));
+         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.text('Сети не найдены'))));
         return;
       }
       showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: Text('Сети — ${dev.name}'),
+           title: Text('${s.text('Сети')} — ${dev.name}'),
           content: SizedBox(
             width: double.maxFinite,
             child: ListView.builder(
@@ -557,7 +559,7 @@ class _WifiScreenState extends State<WifiScreen> {
                 return ListTile(
                   leading: Icon(Icons.wifi, color: color),
                   title: Text(n['ssid'] ?? '?'),
-                  subtitle: Text('Сигнал: ${n['signal']} dBm • Канал ${n['channel']}'),
+                 subtitle: Text('${s.text('Сигнал')}: ${n['signal']} dBm • ${s.text('Канал')} ${n['channel']}'),
                   onTap: () {
                     Navigator.pop(ctx);
                     _connectToWifi(dev, n['ssid']!);
@@ -569,7 +571,7 @@ class _WifiScreenState extends State<WifiScreen> {
         ),
       );
     } catch (e) {
-      if (mounted) { setState(() => processing.remove('scan_${dev.name}')); ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка: $e'))); }
+       if (mounted) { setState(() => processing.remove('scan_${dev.name}')); ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${s.text('Ошибка')}: $e'))); }
     }
   }
 
@@ -578,24 +580,24 @@ class _WifiScreenState extends State<WifiScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Подключиться к $ssid'),
+         title: Text('${s.text('Подключиться к')} $ssid'),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('Подключиться как клиент (WAN)? Текущая точка доступа будет сохранена.'),
+           Text(s.text('Подключиться как клиент (WAN)? Текущая точка доступа будет сохранена.')),
           const SizedBox(height: 8),
-          TextField(controller: passCtrl, decoration: const InputDecoration(labelText: 'Пароль (если есть)')),
+           TextField(controller: passCtrl, decoration: InputDecoration(labelText: s.text('Пароль (если есть)'))),
         ]),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Подключить')),
+           TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(s.text('Отмена'))),
+           FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(s.text('Подключить'))),
         ],
       ),
     );
     if (ok != true) return;
     try {
       await widget.service.wifiClientConnect(dev.name, ssid, passCtrl.text.isEmpty ? null : passCtrl.text);
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Wi-Fi перезагружен, подключение к сети...')));
+       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.text('Wi-Fi перезагружен, подключение к сети...'))));
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
+       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${s.text('Ошибка')}: $e')));
     }
   }
 
@@ -620,24 +622,24 @@ class _WifiScreenState extends State<WifiScreen> {
       final ch = result['recommended_channel'];
       final ht = result['recommended_htmode'];
       final level = result['interference_level'] as int;
-      final levelText = level == 0 ? 'Отлично — канал свободен' : '$level сетей';
+       final levelText = level == 0 ? s.text('Отлично — канал свободен') : '$level ${s.text('сетей')}';
 
       final apply = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: Text('${dev.name} — Автооптимизация'),
+           title: Text('${dev.name} — ${s.text('Автооптимизация')}'),
           content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [const Text('Канал:'), const SizedBox(width: 8), Text('$ch', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18))]),
+             Row(children: [Text(s.text('Канал:')), const SizedBox(width: 8), Text('$ch', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18))]),
             const SizedBox(height: 4),
-            Row(children: [const Text('Ширина:'), const SizedBox(width: 8), Text('$ht', style: const TextStyle(fontWeight: FontWeight.w600))]),
+             Row(children: [Text(s.text('Ширина:')), const SizedBox(width: 8), Text('$ht', style: const TextStyle(fontWeight: FontWeight.w600))]),
             const SizedBox(height: 4),
-            Text('Помех: $levelText', style: TextStyle(color: level == 0 ? Colors.green : Colors.orange)),
+             Text('${s.text('Помех:')} $levelText', style: TextStyle(color: level == 0 ? Colors.green : Colors.orange)),
             const SizedBox(height: 12),
-            if (result['channels'] is Map) Text('Каналы: ${(result['channels'] as Map).entries.map((e) => '${e.key}(${e.value})').join(', ')}', style: const TextStyle(fontSize: 11)),
+             if (result['channels'] is Map) Text('${s.text('Каналы:')} ${(result['channels'] as Map).entries.map((e) => '${e.key}(${e.value})').join(', ')}', style: const TextStyle(fontSize: 11)),
           ]),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Применить')),
+             TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(s.text('Отмена'))),
+             FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(s.text('Применить'))),
           ],
         ),
       );
@@ -647,12 +649,13 @@ class _WifiScreenState extends State<WifiScreen> {
         await _load();
       }
     } catch (e) {
-      if (mounted) { setState(() => processing.remove('ai_${dev.name}')); ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка: $e'))); }
+       if (mounted) { setState(() => processing.remove('ai_${dev.name}')); ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${s.text('Ошибка')}: $e'))); }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
     final theme = Theme.of(context);
     return Scaffold(
       body: RefreshIndicator(
@@ -661,7 +664,7 @@ class _WifiScreenState extends State<WifiScreen> {
           physics: const BouncingScrollPhysics(),
           slivers: [
             SliverAppBar.large(
-              title: const Text('Wi-Fi'),
+              title: Text(s.wifi),
               actions: [
                 IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
               ],
@@ -677,20 +680,20 @@ class _WifiScreenState extends State<WifiScreen> {
                   child: FilledButton.tonalIcon(
                     onPressed: processing.containsKey('reload') ? null : _reloadWifi,
                     icon: processing.containsKey('reload') ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.refresh),
-                    label: const Text('Перезагрузить Wi-Fi'),
+                    label: Text(s.text('Перезагрузить Wi-Fi')),
                   ),
                 ),
               ),
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
                 sliver: SliverToBoxAdapter(
-                  child: Text('Радиомодули', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                  child: Text(s.text('Радиомодули'), style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
                 ),
               ),
               if (devices.isEmpty)
-                const SliverPadding(
+                 SliverPadding(
                   padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  sliver: SliverToBoxAdapter(child: Text('Радиомодули не найдены')),
+                   sliver: SliverToBoxAdapter(child: Text(s.text('Радиомодули не найдены'))),
                 )
               else
                 SliverPadding(
@@ -703,8 +706,8 @@ class _WifiScreenState extends State<WifiScreen> {
                         final hasData = interference.isNotEmpty;
                         final maxCount = hasData ? interference.values.reduce((a, b) => a > b ? a : b) : 0;
                         final summary = hasData
-                            ? 'Найдено ${interference.length} каналов, макс. $maxCount сетей'
-                            : 'Загрузка каналов...';
+                             ? '${s.text('Найдено')} ${interference.length} ${s.text('каналов, макс.')} $maxCount ${s.text('сетей')}'
+                             : s.text('Загрузка каналов...');
                         return Card(
                           margin: const EdgeInsets.only(bottom: 12),
                           child: Padding(
@@ -716,10 +719,10 @@ class _WifiScreenState extends State<WifiScreen> {
                                   contentPadding: EdgeInsets.zero,
                                   leading: Icon(Icons.wifi_tethering, color: d.up ? Colors.green : theme.colorScheme.error),
                                   title: Text(d.name),
-                                  subtitle: Text('Канал ${d.channel ?? '-'} • ${d.band ?? ''} • ${_cleanHt(d.htMode)}'),
+                                  subtitle: Text('${s.text('Канал')} ${d.channel ?? '-'} • ${d.band ?? ''} • ${_cleanHt(d.htMode)}'),
                                   trailing: Chip(
                                     visualDensity: VisualDensity.compact,
-                                    label: Text(d.up ? 'Вкл' : 'Выкл'),
+                                    label: Text(d.up ? s.text('Вкл') : s.text('Выкл')),
                                     backgroundColor: d.up ? Colors.green.withValues(alpha: 0.15) : theme.colorScheme.surfaceContainerHighest,
                                   ),
                                 ),
@@ -731,7 +734,7 @@ class _WifiScreenState extends State<WifiScreen> {
                                       child: OutlinedButton.icon(
                                         onPressed: processing.containsKey('scan_${d.name}') ? null : () => _showWifiScanner(d),
                                         icon: const Icon(Icons.wifi_find),
-                                        label: const Text('Сканер'),
+                                        label: Text(s.text('Сканер')),
                                       ),
                                     ),
                                     const SizedBox(width: 8),
@@ -751,7 +754,7 @@ class _WifiScreenState extends State<WifiScreen> {
                                       child: OutlinedButton.icon(
                                         onPressed: processing.containsKey('ht_${d.name}') ? null : () => _setHtMode(d),
                                         icon: const Icon(Icons.height),
-                                        label: const Text('Ширина'),
+                                        label: Text(s.text('Ширина')),
                                       ),
                                     ),
                                     const SizedBox(width: 8),
@@ -759,7 +762,7 @@ class _WifiScreenState extends State<WifiScreen> {
                                       child: OutlinedButton.icon(
                                         onPressed: processing.containsKey('heatmap_${d.name}') ? null : () => _showHeatmap(d),
                                         icon: const Icon(Icons.map),
-                                        label: const Text('Карта'),
+                                        label: Text(s.text('Карта')),
                                       ),
                                     ),
                                   ],
@@ -771,7 +774,7 @@ class _WifiScreenState extends State<WifiScreen> {
                                       child: OutlinedButton.icon(
                                         onPressed: processing.containsKey('ch_${d.name}') ? null : () => _setChannel(d),
                                         icon: const Icon(Icons.tune),
-                                        label: const Text('Канал'),
+                                        label: Text(s.text('Канал')),
                                       ),
                                     ),
                                     const SizedBox(width: 8),
@@ -779,7 +782,7 @@ class _WifiScreenState extends State<WifiScreen> {
                                       child: OutlinedButton.icon(
                                         onPressed: processing.containsKey('auto_${d.name}') ? null : () => _autoChannel(d),
                                         icon: const Icon(Icons.auto_fix_high),
-                                        label: const Text('Авто'),
+                                        label: Text(s.text('Авто')),
                                       ),
                                     ),
                                   ],
@@ -808,7 +811,7 @@ class _WifiScreenState extends State<WifiScreen> {
                                           ),
                                         ),
                                         icon: const Icon(Icons.analytics, size: 18),
-                                        label: const Text('Анализатор каналов', style: TextStyle(fontSize: 13)),
+                                        label: Text(s.text('Анализатор каналов'), style: const TextStyle(fontSize: 13)),
                                       ),
                                     ),
                                   ],
@@ -825,13 +828,13 @@ class _WifiScreenState extends State<WifiScreen> {
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                 sliver: SliverToBoxAdapter(
-                  child: Text('Сети', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                  child: Text(s.text('Сети'), style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
                 ),
               ),
               if (networks.isEmpty)
-                const SliverPadding(
+                 SliverPadding(
                   padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  sliver: SliverToBoxAdapter(child: Text('Сети не найдены')),
+                   sliver: SliverToBoxAdapter(child: Text(s.text('Сети не найдены'))),
                 )
               else
                 SliverPadding(
@@ -845,7 +848,7 @@ class _WifiScreenState extends State<WifiScreen> {
                           child: ListTile(
                             leading: const Icon(Icons.wifi),
                             title: Text(n.ssid),
-                            subtitle: Text('${n.device} • ${n.encryption ?? 'открытая'}'),
+                            subtitle: Text('${n.device} • ${n.encryption ?? s.text('открытая')}'),
                             trailing: processing.containsKey(n.section)
                                 ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
                                 : Switch(
@@ -878,10 +881,10 @@ class _WifiScreenState extends State<WifiScreen> {
             children: [
               Icon(Icons.error_outline, size: 64, color: theme.colorScheme.error),
               const SizedBox(height: 16),
-              Text('Ошибка', style: theme.textTheme.titleMedium),
+              Text(s.text('Ошибка'), style: theme.textTheme.titleMedium),
               Text(error!, textAlign: TextAlign.center),
               const SizedBox(height: 16),
-              FilledButton.tonal(onPressed: _load, child: const Text('Повторить')),
+              FilledButton.tonal(onPressed: _load, child: Text(s.text('Повторить'))),
             ],
           ),
         ),

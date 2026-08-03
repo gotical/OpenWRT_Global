@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/app_strings.dart';
 import '../services/openwrt_service.dart';
 
 class FirewallScreen extends StatefulWidget {
@@ -11,6 +12,7 @@ class FirewallScreen extends StatefulWidget {
 }
 
 class _FirewallScreenState extends State<FirewallScreen> {
+  String _t(String source) => AppStrings.of(context).text(source);
   List<Map<String, String>> zones = [];
   List<Map<String, String>> forwards = [];
   List<Map<String, String>> rules = [];
@@ -62,10 +64,10 @@ class _FirewallScreenState extends State<FirewallScreen> {
       if (!mounted) return;
       final r = await widget.service.fetchFirewallRunning();
       if (mounted) setState(() => running = r);
-      _snack('Фаервол: $action');
+      _snack('${_t('Фаервол')}: $action');
     } catch (e) {
       if (!mounted) return;
-      _snack('Ошибка: $e');
+      _snack('${_t('Ошибка')}: $e');
     } finally {
       if (mounted) setState(() => processing.remove('$key:$action'));
     }
@@ -78,10 +80,10 @@ class _FirewallScreenState extends State<FirewallScreen> {
       if (!mounted) return;
       s['enabled'] = enabled ? '1' : '0';
       setState(() {});
-      _snack(enabled ? 'Правило включено' : 'Правило отключено');
+      _snack(_t(enabled ? 'Правило включено' : 'Правило отключено'));
     } catch (e) {
       if (!mounted) return;
-      _snack('Ошибка: $e');
+      _snack('${_t('Ошибка')}: $e');
     } finally {
       if (mounted) setState(() => processing.remove('t_${s['key']}'));
     }
@@ -91,11 +93,11 @@ class _FirewallScreenState extends State<FirewallScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Удалить $kind?'),
+         title: Text('${_t('Удалить')} $kind?'),
         content: Text(s['name'] ?? s['key']!),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Удалить')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(_t('Отмена'))),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(_t('Удалить'))),
         ],
       ),
     );
@@ -103,40 +105,40 @@ class _FirewallScreenState extends State<FirewallScreen> {
     try {
       await widget.service.deleteFirewallSection(s['key']!);
       if (!mounted) return;
-      _snack('Удалено');
+       _snack(_t('Удалено'));
       _load();
     } catch (e) {
       if (!mounted) return;
-      _snack('Ошибка: $e');
+      _snack('${_t('Ошибка')}: $e');
     }
   }
 
   Future<void> _addBlock() async {
-    final value = await _blockDialog('', 'Добавить блокировку');
+    final value = await _blockDialog('', _t('Добавить'));
     if (value == null || !mounted) return;
     try {
       await widget.service.addBlock(value);
       if (!mounted) return;
-      _snack('Заблокировано: $value');
+      _snack('${_t('Заблокировано')}: $value');
       _load();
     } catch (e) {
       if (!mounted) return;
-      _snack('Ошибка: $e');
+      _snack('${_t('Ошибка')}: $e');
     }
   }
 
   Future<void> _editBlock(Map<String, String> b) async {
-    final value = await _blockDialog(b['value']!, 'Изменить блокировку');
+    final value = await _blockDialog(b['value']!, _t('Изменить'));
     if (value == null || value == b['value'] || !mounted) return;
     try {
       await widget.service.removeBlock(b);
       await widget.service.addBlock(value);
       if (!mounted) return;
-      _snack('Обновлено: $value');
+      _snack('${_t('Обновлено')}: $value');
       _load();
     } catch (e) {
       if (!mounted) return;
-      _snack('Ошибка: $e');
+      _snack('${_t('Ошибка')}: $e');
     }
   }
 
@@ -144,11 +146,11 @@ class _FirewallScreenState extends State<FirewallScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Снять блокировку?'),
+         title: Text('${_t('Снять блокировку')}?'),
         content: Text(b['value']!),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Разблокировать')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(_t('Отмена'))),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(_t('Разблокировать'))),
         ],
       ),
     );
@@ -156,11 +158,11 @@ class _FirewallScreenState extends State<FirewallScreen> {
     try {
       await widget.service.removeBlock(b);
       if (!mounted) return;
-      _snack('Разблокировано: ${b['value']}');
+       _snack('${_t('Разблокировано')}: ${b['value']}');
       _load();
     } catch (e) {
       if (!mounted) return;
-      _snack('Ошибка: $e');
+      _snack('${_t('Ошибка')}: $e');
     }
   }
 
@@ -174,18 +176,18 @@ class _FirewallScreenState extends State<FirewallScreen> {
           TextField(
             controller: controller,
             autofocus: true,
-            decoration: const InputDecoration(
-              labelText: 'Домен или IP',
-              hintText: 'example.com или 1.2.3.4',
+             decoration: InputDecoration(
+               labelText: _t('Домен или IP'),
+               hintText: _t('example.com или 1.2.3.4'),
             ),
           ),
           const SizedBox(height: 8),
-          Text('Домен блокируется через DNS (все запросы → 0.0.0.0), IP — через правило фаервола REJECT.',
+           Text(_t('Домен блокируется через DNS (все запросы → 0.0.0.0), IP — через правило фаервола REJECT.'),
               style: Theme.of(ctx).textTheme.bodySmall?.copyWith(color: Theme.of(ctx).colorScheme.onSurfaceVariant)),
         ]),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Заблокировать')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(_t('Отмена'))),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(_t('Заблокировать'))),
         ],
       ),
     );
@@ -212,11 +214,11 @@ class _FirewallScreenState extends State<FirewallScreen> {
         proto: values['proto']!,
       );
       if (!mounted) return;
-      _snack('Проброс добавлен');
+       _snack(_t('Проброс добавлен'));
       _load();
     } catch (e) {
       if (!mounted) return;
-      _snack('Ошибка: $e');
+      _snack('${_t('Ошибка')}: $e');
     }
   }
 
@@ -241,11 +243,11 @@ class _FirewallScreenState extends State<FirewallScreen> {
         enabled: values['enabled'] == '1',
       );
       if (!mounted) return;
-      _snack('Проброс обновлён');
+       _snack(_t('Проброс обновлён'));
       _load();
     } catch (e) {
       if (!mounted) return;
-      _snack('Ошибка: $e');
+      _snack('${_t('Ошибка')}: $e');
     }
   }
 
@@ -260,35 +262,35 @@ class _FirewallScreenState extends State<FirewallScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSt) => AlertDialog(
-          title: Text(existing == null ? 'Новое правило' : 'Изменить правило'),
+           title: Text(_t(existing == null ? 'Новое правило' : 'Изменить правило')),
           content: SingleChildScrollView(
             child: Column(mainAxisSize: MainAxisSize.min, children: [
-              TextField(controller: name, decoration: const InputDecoration(labelText: 'Название')),
+               TextField(controller: name, decoration: InputDecoration(labelText: _t('Название'))),
               const SizedBox(height: 4),
               DropdownButtonFormField<String>(
                 initialValue: proto,
-                items: const [
+                 items: [
                   DropdownMenuItem(value: 'tcp', child: Text('TCP')),
                   DropdownMenuItem(value: 'udp', child: Text('UDP')),
-                  DropdownMenuItem(value: 'tcp udp', child: Text('Оба')),
+                   DropdownMenuItem(value: 'tcp udp', child: Text(_t('Оба'))),
                 ],
                 onChanged: (v) => setSt(() => proto = v!),
               ),
-              TextField(controller: port, decoration: const InputDecoration(labelText: 'Внешний порт (WAN)'), keyboardType: TextInputType.number),
-              TextField(controller: ip, decoration: const InputDecoration(labelText: 'Локальный IP'), keyboardType: TextInputType.number),
-              TextField(controller: dport, decoration: const InputDecoration(labelText: 'Локальный порт'), keyboardType: TextInputType.number),
+               TextField(controller: port, decoration: InputDecoration(labelText: _t('Внешний порт (WAN)')), keyboardType: TextInputType.number),
+               TextField(controller: ip, decoration: InputDecoration(labelText: _t('Локальный IP')), keyboardType: TextInputType.number),
+               TextField(controller: dport, decoration: InputDecoration(labelText: _t('Локальный порт')), keyboardType: TextInputType.number),
               SwitchListTile(
                 value: enabled,
                 onChanged: (v) => setSt(() => enabled = v),
-                title: const Text('Правило включено'),
+                 title: Text(_t('Правило включено')),
               ),
             ]),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
+             TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(_t('Отмена'))),
             FilledButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: Text(existing == null ? 'Добавить' : 'Сохранить'),
+               child: Text(_t(existing == null ? 'Добавить' : 'Сохранить')),
             ),
           ],
         ),
@@ -310,6 +312,7 @@ class _FirewallScreenState extends State<FirewallScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final s = AppStrings.of(context);
     return Scaffold(
       body: RefreshIndicator(
         onRefresh: _load,
@@ -317,7 +320,7 @@ class _FirewallScreenState extends State<FirewallScreen> {
           physics: const BouncingScrollPhysics(),
           slivers: [
             SliverAppBar.large(
-              title: const Text('Фаервол'),
+              title: Text(s.text('Фаервол')),
               actions: [
                 IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
               ],
@@ -336,7 +339,7 @@ class _FirewallScreenState extends State<FirewallScreen> {
                         const SizedBox(height: 16),
                         Text(error!, textAlign: TextAlign.center),
                         const SizedBox(height: 16),
-                        FilledButton.tonal(onPressed: _load, child: const Text('Повторить')),
+                         FilledButton.tonal(onPressed: _load, child: Text(_t('Повторить'))),
                       ],
                     ),
                   ),
@@ -360,10 +363,10 @@ class _FirewallScreenState extends State<FirewallScreen> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(running ? 'Фаервол работает' : 'Фаервол остановлен',
+                                     Text(_t(running ? 'Фаервол работает' : 'Фаервол остановлен'),
                                         style: theme.textTheme.titleMedium),
                                     const SizedBox(height: 4),
-                                    Text('Правил: ${zones.length + forwards.length + rules.length + redirects.length}',
+                                     Text('${_t('Правил:')} ${zones.length + forwards.length + rules.length + redirects.length}',
                                         style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
                                   ],
                                 ),
@@ -377,7 +380,7 @@ class _FirewallScreenState extends State<FirewallScreen> {
                                 child: OutlinedButton.icon(
                                   onPressed: processing.containsKey('fw:restart') ? null : () => _action('fw', 'restart'),
                                   icon: const Icon(Icons.refresh, size: 18),
-                                  label: const Text('Перезагрузить'),
+                                   label: Text(_t('Перезагрузить')),
                                 ),
                               ),
                               const SizedBox(width: 8),
@@ -385,7 +388,7 @@ class _FirewallScreenState extends State<FirewallScreen> {
                                 child: FilledButton.tonalIcon(
                                   onPressed: processing.containsKey('fw:start') ? null : () => _action('fw', 'start'),
                                   icon: const Icon(Icons.play_arrow, size: 18),
-                                  label: const Text('Старт'),
+                                   label: Text(_t('Старт')),
                                 ),
                               ),
                               const SizedBox(width: 8),
@@ -393,7 +396,7 @@ class _FirewallScreenState extends State<FirewallScreen> {
                                 child: FilledButton.tonalIcon(
                                   onPressed: processing.containsKey('fw:stop') ? null : () => _action('fw', 'stop'),
                                   icon: const Icon(Icons.stop, size: 18),
-                                  label: const Text('Стоп'),
+                                   label: Text(_t('Стоп')),
                                 ),
                               ),
                             ],
@@ -404,7 +407,7 @@ class _FirewallScreenState extends State<FirewallScreen> {
                   ),
                 ),
               ),
-              _sectionHeader(theme, 'Блокировка доменов и IP'),
+               _sectionHeader(theme, _t('Блокировка доменов и IP')),
               SliverPadding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 sliver: SliverToBoxAdapter(
@@ -415,7 +418,7 @@ class _FirewallScreenState extends State<FirewallScreen> {
                           controller: _blockSearch,
                           onChanged: (v) => setState(() => blockFilter = v),
                           decoration: InputDecoration(
-                            hintText: 'Поиск по списку (${blocks.length})',
+                             hintText: '${_t('Поиск по списку')} (${blocks.length})',
                             prefixIcon: const Icon(Icons.search, size: 20),
                             isDense: true,
                             border: OutlineInputBorder(
@@ -430,21 +433,21 @@ class _FirewallScreenState extends State<FirewallScreen> {
                       FilledButton.icon(
                         onPressed: _addBlock,
                         icon: const Icon(Icons.add, size: 18),
-                        label: const Text('Добавить'),
+                         label: Text(_t('Добавить')),
                       ),
                     ],
                   ),
                 ),
               ),
               if (_filteredBlocks.isEmpty)
-                const SliverPadding(
+                 SliverPadding(
                   padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
                   sliver: SliverToBoxAdapter(
                     child: Row(
                       children: [
                         Icon(Icons.check_circle_outline, color: Colors.green),
                         SizedBox(width: 12),
-                        Expanded(child: Text('Заблокированных нет')),
+                         Expanded(child: Text(_t('Заблокированных нет'))),
                       ],
                     ),
                   ),
@@ -460,7 +463,7 @@ class _FirewallScreenState extends State<FirewallScreen> {
                   ),
                 ),
               if (zones.isNotEmpty) ...[
-                _sectionHeader(theme, 'Зоны'),
+                 _sectionHeader(theme, _t('Зоны')),
                 SliverPadding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   sliver: SliverList(
@@ -476,16 +479,16 @@ class _FirewallScreenState extends State<FirewallScreen> {
                 sliver: SliverToBoxAdapter(
                   child: Row(
                     children: [
-                      Expanded(child: Text('Проброс портов', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold))),
-                      IconButton(onPressed: _addForward, icon: const Icon(Icons.add_circle_outline), tooltip: 'Добавить'),
+                       Expanded(child: Text(_t('Проброс портов'), style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold))),
+                       IconButton(onPressed: _addForward, icon: const Icon(Icons.add_circle_outline), tooltip: _t('Добавить')),
                     ],
                   ),
                 ),
               ),
               if (redirects.isEmpty)
-                const SliverPadding(
+                 SliverPadding(
                   padding: EdgeInsets.symmetric(horizontal: 16),
-                  sliver: SliverToBoxAdapter(child: Text('Пробросов нет')),
+                   sliver: SliverToBoxAdapter(child: Text(_t('Пробросов нет'))),
                 )
               else
                 SliverPadding(
@@ -498,7 +501,7 @@ class _FirewallScreenState extends State<FirewallScreen> {
                   ),
                 ),
               if (forwards.isNotEmpty) ...[
-                _sectionHeader(theme, 'Переадресация между зонами'),
+                 _sectionHeader(theme, _t('Переадресация между зонами')),
                 SliverPadding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   sliver: SliverList(
@@ -510,7 +513,7 @@ class _FirewallScreenState extends State<FirewallScreen> {
                 ),
               ],
               if (rules.isNotEmpty) ...[
-                _sectionHeader(theme, 'Правила трафика'),
+                 _sectionHeader(theme, _t('Правила трафика')),
                 SliverPadding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   sliver: SliverList(
@@ -546,10 +549,10 @@ class _FirewallScreenState extends State<FirewallScreen> {
         leading: Icon(Icons.layers, color: theme.colorScheme.primary),
         title: Text(z['name'] ?? z['key']!),
         subtitle: Text([
-          if ((z['network'] ?? '').isNotEmpty) 'сеть: ${z['network']}',
-          'вход: ${policy(z['input'])}',
-          'выход: ${policy(z['output'])}',
-          'перенаправление: ${policy(z['forward'])}',
+           if ((z['network'] ?? '').isNotEmpty) '${_t('Сеть')}: ${z['network']}',
+           '${_t('Вход')}: ${policy(z['input'])}',
+           '${_t('Выход')}: ${policy(z['output'])}',
+           '${_t('Перенаправление')}: ${policy(z['forward'])}',
           if (z['masq'] == '1') 'MASQUERADE',
         ].join(' • ')),
       ),
@@ -578,13 +581,13 @@ class _FirewallScreenState extends State<FirewallScreen> {
               ),
             IconButton(
               icon: const Icon(Icons.edit_outlined, size: 20),
-              tooltip: 'Изменить',
+               tooltip: _t('Изменить'),
               onPressed: () => _editForward(r),
             ),
             IconButton(
               icon: const Icon(Icons.delete_outline, size: 20),
-              tooltip: 'Удалить',
-              onPressed: () => _delete(r, 'правило'),
+               tooltip: _t('Удалить'),
+               onPressed: () => _delete(r, _t('правило')),
             ),
           ],
         ),
@@ -629,8 +632,8 @@ class _FirewallScreenState extends State<FirewallScreen> {
               ),
             IconButton(
               icon: const Icon(Icons.delete_outline, size: 20),
-              tooltip: 'Удалить',
-              onPressed: () => _delete(r, 'правило'),
+               tooltip: _t('Удалить'),
+               onPressed: () => _delete(r, _t('правило')),
             ),
           ],
         ),
@@ -662,10 +665,10 @@ class _FirewallScreenState extends State<FirewallScreen> {
               color: enabled ? theme.colorScheme.error : theme.colorScheme.onSurfaceVariant,
             ),
             const SizedBox(width: 4),
-            Text(isIp ? 'IP • REJECT' : 'домен • DNS', style: theme.textTheme.bodySmall),
+             Text(isIp ? _t('IP • REJECT') : _t('домен • DNS'), style: theme.textTheme.bodySmall),
             if (!enabled) ...[
               const SizedBox(width: 8),
-              Text('выкл', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+               Text(_t('выкл'), style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
             ],
           ],
         ),
@@ -684,10 +687,10 @@ class _FirewallScreenState extends State<FirewallScreen> {
                           if (!mounted) return;
                           b['enabled'] = v ? '1' : '0';
                           setState(() {});
-                          _snack(v ? 'Включено' : 'Выключено');
+                           _snack(_t(v ? 'Включено' : 'Выключено'));
                         } catch (e) {
                           if (!mounted) return;
-                          _snack('Ошибка: $e');
+                           _snack('${_t('Ошибка')}: $e');
                         } finally {
                           if (mounted) setState(() => processing.remove('t_${b['key']}'));
                         }
@@ -695,12 +698,12 @@ class _FirewallScreenState extends State<FirewallScreen> {
                     ),
             IconButton(
               icon: const Icon(Icons.edit_outlined, size: 20),
-              tooltip: 'Изменить',
+               tooltip: _t('Изменить'),
               onPressed: () => _editBlock(b),
             ),
             IconButton(
               icon: const Icon(Icons.delete_outline, size: 20),
-              tooltip: 'Разблокировать',
+               tooltip: _t('Разблокировать'),
               onPressed: () => _deleteBlock(b),
             ),
           ],

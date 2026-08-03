@@ -71,33 +71,33 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Row(children: [
+        title: Row(children: [
           Icon(Icons.verified_user_outlined),
           SizedBox(width: 10),
-          Text('Проверка SSH ключа'),
+           Text(AppStrings.of(context).text('Проверка SSH ключа')),
         ]),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Отпечаток (SHA256):'),
+             Text(AppStrings.of(context).text('Отпечаток (SHA256):')),
             const SizedBox(height: 10),
             SelectableText(
               fingerprint,
               style: const TextStyle(fontFamily: 'monospace'),
             ),
             const SizedBox(height: 12),
-            const Text('Принять ключ и сохранить для этого роутера?'),
+             Text(AppStrings.of(context).text('Принять ключ и сохранить для этого роутера?')),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Отмена'),
+             child: Text(AppStrings.of(context).text('Отмена')),
           ),
           FilledButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Принять'),
+             child: Text(AppStrings.of(context).text('Принять')),
           ),
         ],
       ),
@@ -172,16 +172,16 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
               child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Theme.of(ctx).colorScheme.outlineVariant, borderRadius: BorderRadius.circular(2)))),
                 const SizedBox(height: 20),
-                Text(cfg == null ? s.addRouter : 'Изменить', style: Theme.of(ctx).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+                 Text(cfg == null ? s.addRouter : s.text('Изменить'), style: Theme.of(ctx).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 20),
-                TextFormField(controller: _name, decoration: InputDecoration(labelText: s.name, prefixIcon: const Icon(Icons.label)), validator: (v) => v == null || v.isEmpty ? 'Обязательно' : null),
+                 TextFormField(controller: _name, decoration: InputDecoration(labelText: s.name, prefixIcon: const Icon(Icons.label)), validator: (v) => v == null || v.isEmpty ? s.text('Обязательно') : null),
                 const SizedBox(height: 12),
-                TextFormField(controller: _host, decoration: InputDecoration(labelText: s.host, prefixIcon: const Icon(Icons.router)), validator: (v) => v == null || v.isEmpty ? 'Обязательно' : null),
+                 TextFormField(controller: _host, decoration: InputDecoration(labelText: s.host, prefixIcon: const Icon(Icons.router)), validator: (v) => v == null || v.isEmpty ? s.text('Обязательно') : null),
                 const SizedBox(height: 12),
                 Row(children: [
-                  Expanded(flex: 2, child: TextFormField(controller: _port, decoration: InputDecoration(labelText: s.port, prefixIcon: const Icon(Icons.dialpad)), keyboardType: TextInputType.number, validator: (v) => v == null || v.isEmpty ? 'Обязательно' : null)),
+                   Expanded(flex: 2, child: TextFormField(controller: _port, decoration: InputDecoration(labelText: s.port, prefixIcon: const Icon(Icons.dialpad)), keyboardType: TextInputType.number, validator: (v) => v == null || v.isEmpty ? s.text('Обязательно') : null)),
                   const SizedBox(width: 12),
-                  Expanded(flex: 3, child: TextFormField(controller: _user, decoration: InputDecoration(labelText: s.username, prefixIcon: const Icon(Icons.person)), validator: (v) => v == null || v.isEmpty ? 'Обязательно' : null)),
+                   Expanded(flex: 3, child: TextFormField(controller: _user, decoration: InputDecoration(labelText: s.username, prefixIcon: const Icon(Icons.person)), validator: (v) => v == null || v.isEmpty ? s.text('Обязательно') : null)),
                 ]),
                 const SizedBox(height: 12),
                 // Переключатель: пароль / ключ
@@ -196,7 +196,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                         value: _useKey,
                         onChanged: (v) => setSt(() => _useKey = v),
                          title: Text(s.sshKey, style: const TextStyle(fontSize: 14)),
-                        subtitle: Text(_useKey ? 'Войдите по ключу (PEM)' : 'Войдите по паролю', style: TextStyle(fontSize: 12, color: Theme.of(ctx).colorScheme.onSurfaceVariant)),
+                         subtitle: Text(_useKey ? s.text('Войдите по ключу (PEM)') : s.text('Войдите по паролю'), style: TextStyle(fontSize: 12, color: Theme.of(ctx).colorScheme.onSurfaceVariant)),
                         secondary: Icon(_useKey ? Icons.vpn_key : Icons.lock),
                       ),
                       if (!_useKey)
@@ -210,7 +210,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                               suffixIcon: IconButton(icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility, size: 20), onPressed: () => setSt(() => _obscure = !_obscure)),
                               isDense: true,
                             ),
-                            validator: (v) => _useKey ? null : (v == null || v.isEmpty ? 'Обязательно' : null),
+                             validator: (v) => _useKey ? null : (v == null || v.isEmpty ? s.text('Обязательно') : null),
                           ),
                         ),
                       if (_useKey)
@@ -222,27 +222,27 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                 controller: _keyCtrl, maxLines: 6,
                                 style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
                                 decoration: InputDecoration(
-                                  labelText: 'Приватный ключ (PEM)',
+                                   labelText: s.text('Приватный ключ (PEM)'),
                                   prefixIcon: const Padding(
                                     padding: EdgeInsets.only(bottom: 80),
                                     child: Icon(Icons.vpn_key, size: 20),
                                   ),
                                   isDense: true,
                                 ),
-                                validator: (v) => !_useKey ? null : (v == null || v.isEmpty ? 'Вставьте ключ' : null),
+                                 validator: (v) => !_useKey ? null : (v == null || v.isEmpty ? s.text('Вставьте ключ') : null),
                               ),
                               const SizedBox(height: 6),
                               Row(
                                 children: [
                                   Expanded(
-                                    child: Text('Нажмите "Вставить" чтобы вставить ключ из буфера',
+                                     child: Text(s.text('Нажмите "Вставить" чтобы вставить ключ из буфера'),
                                         style: TextStyle(fontSize: 11, color: Theme.of(ctx).colorScheme.onSurfaceVariant)),
                                   ),
                                   if (_host.text.isNotEmpty && _user.text.isNotEmpty)
                                     TextButton.icon(
                                       onPressed: () => _generateKey(ctx, setSt),
                                       icon: const Icon(Icons.auto_fix_high, size: 16),
-                                      label: const Text('Создать ключ', style: TextStyle(fontSize: 12)),
+                                       label: Text(s.text('Создать ключ'), style: const TextStyle(fontSize: 12)),
                                     ),
                                 ],
                               ),
@@ -298,15 +298,15 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       _keyCtrl.text = keys['private'] ?? '';
       setSt(() {});
       if (ctx.mounted) {
-        ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
-          content: Text('SSH-ключ создан и установлен на роутер!'),
+         ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+           content: Text(AppStrings.of(ctx).text('SSH-ключ создан и установлен на роутер!')),
           backgroundColor: Colors.green,
         ));
       }
     } catch (e) {
       if (ctx.mounted) {
         ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
-          content: Text('Ошибка: ${e.toString().replaceAll(config.password, '***')}'),
+           content: Text('${AppStrings.of(ctx).text('Ошибка')}: ${e.toString().replaceAll(config.password, '***')}'),
           backgroundColor: Colors.red,
         ));
       }
@@ -330,7 +330,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                   Text('OPENWRT', style: t.textTheme.headlineLarge?.copyWith(fontWeight: FontWeight.w900, letterSpacing: -1)),
                   Text('Global', style: t.textTheme.headlineLarge?.copyWith(fontWeight: FontWeight.w300, color: t.colorScheme.primary)),
                   const SizedBox(height: 12),
-                  Text('Управляйте роутером', style: t.textTheme.bodyLarge?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+                   Text(s.text('Управляйте роутером'), style: t.textTheme.bodyLarge?.copyWith(color: t.colorScheme.onSurfaceVariant)),
                 ]),
               ),
             ),
@@ -372,7 +372,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                   Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                                     Text(r.name, style: t.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
                                     const SizedBox(height: 2),
-                                    Text('${r.username}@${r.host}:${r.port}${r.useKey ? ' (ключ)' : ''}', style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+                                     Text('${r.username}@${r.host}:${r.port}${r.useKey ? ' (${s.text('ключ')})' : ''}', style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
                                   ])),
                                   IconButton(icon: const Icon(Icons.edit_outlined, size: 20), onPressed: () => _sheet(r, i)),
                                   IconButton(icon: Icon(Icons.delete_outline, size: 20, color: t.colorScheme.error), onPressed: () => _del(i)),

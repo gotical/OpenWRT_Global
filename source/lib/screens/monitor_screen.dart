@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import '../l10n/app_strings.dart';
 import '../services/openwrt_service.dart';
 
 class MonitorScreen extends StatefulWidget {
@@ -11,6 +12,7 @@ class MonitorScreen extends StatefulWidget {
 }
 
 class _MonitorScreenState extends State<MonitorScreen> {
+  String _t(String source) => AppStrings.of(context).text(source);
   List<Map<String, String>> connections = [];
   List<Map<String, String>> filtered = [];
   bool loading = true;
@@ -57,7 +59,7 @@ class _MonitorScreenState extends State<MonitorScreen> {
   }
 
   List<Widget> _groupSection(String key, List<Map<String, String>> list, ThemeData t) => [
-    SliverPadding(padding: const EdgeInsets.fromLTRB(16, 8, 16, 4), sliver: SliverToBoxAdapter(child: Row(children: [const Icon(Icons.computer, size: 18), const SizedBox(width: 6), Text(key, style: t.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)), const SizedBox(width: 6), Text('${list.length} соед.', style: t.textTheme.bodySmall)]))),
+     SliverPadding(padding: const EdgeInsets.fromLTRB(16, 8, 16, 4), sliver: SliverToBoxAdapter(child: Row(children: [const Icon(Icons.computer, size: 18), const SizedBox(width: 6), Text(key, style: t.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)), const SizedBox(width: 6), Text('${list.length} ${_t('соед.')}', style: t.textTheme.bodySmall)]))),
     SliverPadding(padding: const EdgeInsets.symmetric(horizontal: 16), sliver: SliverList(delegate: SliverChildBuilderDelegate((_, i) {
       final c = list[i];
       return Padding(padding: const EdgeInsets.only(bottom: 4, left: 8), child: Row(children: [
@@ -71,19 +73,20 @@ class _MonitorScreenState extends State<MonitorScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
     final t = Theme.of(context);
     final groups = _byDevice;
     return Scaffold(
       body: CustomScrollView(
         physics: const BouncingScrollPhysics(),
         slivers: [
-          SliverAppBar.large(title: const Text('Мониторинг'), actions: [
-            IconButton(icon: Icon(byDevice ? Icons.list : Icons.person), onPressed: () => setState(() => byDevice = !byDevice), tooltip: 'По устройствам'),
+          SliverAppBar.large(title: Text(s.text('Мониторинг')), actions: [
+             IconButton(icon: Icon(byDevice ? Icons.list : Icons.person), onPressed: () => setState(() => byDevice = !byDevice), tooltip: _t('По устройствам')),
             IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
           ]),
-          SliverPadding(padding: const EdgeInsets.fromLTRB(16, 8, 16, 8), sliver: SliverToBoxAdapter(child: SearchBar(controller: _searchCtrl, hintText: 'IP или порт', leading: const Icon(Icons.search), trailing: _searchCtrl.text.isNotEmpty ? [IconButton(icon: const Icon(Icons.clear), onPressed: () => _searchCtrl.clear())] : null))),
+           SliverPadding(padding: const EdgeInsets.fromLTRB(16, 8, 16, 8), sliver: SliverToBoxAdapter(child: SearchBar(controller: _searchCtrl, hintText: _t('IP или порт'), leading: const Icon(Icons.search), trailing: _searchCtrl.text.isNotEmpty ? [IconButton(icon: const Icon(Icons.clear), onPressed: () => _searchCtrl.clear())] : null))),
           if (loading) const SliverFillRemaining(child: Center(child: CircularProgressIndicator()))
-          else if (filtered.isEmpty) const SliverFillRemaining(child: Center(child: Text('Нет активных соединений')))
+           else if (filtered.isEmpty) SliverFillRemaining(child: Center(child: Text(_t('Нет активных соединений'))))
           else if (!byDevice)
             SliverPadding(padding: const EdgeInsets.symmetric(horizontal: 16), sliver: SliverList(delegate: SliverChildBuilderDelegate((_, i) {
               final c = filtered[i];
