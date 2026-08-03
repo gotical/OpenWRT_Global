@@ -196,11 +196,6 @@ class AnsiEmulator {
     if (col < 0) col = 0;
   }
 
-  void _cursorHome() {
-    row = 0;
-    col = 0;
-  }
-
   void _cursorSet(int r, int c) {
     row = (r <= 0 ? 0 : r - 1);
     col = (c <= 0 ? 0 : c - 1);
@@ -398,7 +393,6 @@ class AnsiTerminalView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const charWidth = 7.8; // ~ моноширинный шрифт fontSize 13
     final lines = controller.emulator.lines;
     return AnimatedBuilder(
       animation: controller,

@@ -166,8 +166,23 @@ class _TerminalScreenState extends State<TerminalScreen> {
       _history.add(line);
       _historyIndex = _history.length;
     }
-    _sendCommand(line);
+    if (_session == null || !_connected) {
+      _appendOutput('${AppStrings.of(context).text('Терминал не подключён. Нажмите кнопку обновления.')}\n');
+    } else {
+      _sendCommand(line);
+    }
     _input.clear();
+  }
+
+  Future<void> _reconnect() async {
+    _stdoutSub?.cancel();
+    _stderrSub?.cancel();
+    try {
+      _session?.close();
+    } catch (_) {}
+    _session = null;
+    if (mounted) setState(() => _connected = false);
+    await _connectShell();
   }
 
   @override
@@ -188,6 +203,11 @@ class _TerminalScreenState extends State<TerminalScreen> {
       appBar: AppBar(
         title: Text(s.text('Терминал (Beta)')),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _reconnect,
+            tooltip: s.text('Переподключиться'),
+          ),
           IconButton(
             icon: const Icon(Icons.content_copy),
             onPressed: _copy,
@@ -246,7 +266,6 @@ class _TerminalScreenState extends State<TerminalScreen> {
                     Expanded(
                       child: TextField(
                         controller: _input,
-                        enabled: _connected,
                         style: const TextStyle(fontFamily: 'monospace', fontSize: 14),
                         decoration: InputDecoration(
                           hintText: _connected ? s.text('Введите команду...') : s.text('Терминал не подключён'),
@@ -261,22 +280,18 @@ class _TerminalScreenState extends State<TerminalScreen> {
                     const SizedBox(width: 4),
                     IconButton(
                       icon: const Icon(Icons.keyboard_arrow_up, size: 20),
-                      onPressed: _connected
-                          ? () {
-                              if (_history.isNotEmpty && _historyIndex > 0) {
-                                _historyIndex--;
-                                _input.text = _history[_historyIndex];
-                                _input.selection = TextSelection.fromPosition(
-                                    TextPosition(offset: _input.text.length));
-                              }
-                            }
-                          : null,
+                      onPressed: () {
+                        if (_history.isNotEmpty && _historyIndex > 0) {
+                          _historyIndex--;
+                          _input.text = _history[_historyIndex];
+                          _input.selection = TextSelection.fromPosition(
+                              TextPosition(offset: _input.text.length));
+                        }
+                      },
                       tooltip: s.text('История ↑'),
                     ),
                     FilledButton(
-                      onPressed: _connected && _input.text.isNotEmpty
-                          ? () => _sendLine(_input.text)
-                          : null,
+                      onPressed: _input.text.isNotEmpty ? () => _sendLine(_input.text) : null,
                       child: const Text('OK'),
                     ),
                   ],

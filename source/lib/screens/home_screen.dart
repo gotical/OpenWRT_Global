@@ -1,11 +1,9 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import '../l10n/app_strings.dart';
 import '../models/router_connection.dart';
 import '../services/openwrt_service.dart';
 import '../services/storage_service.dart';
 import '../services/client_monitor.dart';
-import '../services/biometric_auth_service.dart';
 import 'about_screen.dart';
 import 'dashboard_screen.dart';
 import 'monitor_screen.dart';
@@ -36,9 +34,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   int index = 0;
   bool _checkedDeps = false;
   bool _hideNonFunctional = false;
-  bool _locked = false;
-  DateTime _lastActivity = DateTime.now();
-  Timer? _autoLockTimer;
 
   List<NavigationDestination> get destinations {
     final s = AppStrings.of(context);
@@ -66,18 +61,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     });
     ClientMonitor.instance.onClientConnected = _onClientConnected;
     ClientMonitor.instance.start(service);
-    _startAutoLock();
-  }
-
-  void _startAutoLock() {
-    _autoLockTimer?.cancel();
-    _autoLockTimer = Timer.periodic(const Duration(seconds: 10), (_) {
-      if (!mounted) return;
-      if (_locked) return;
-      if (DateTime.now().difference(_lastActivity).inMinutes >= 5) {
-        setState(() => _locked = true);
-      }
-    });
   }
 
   Future<bool> _verifyHostKey(String fingerprint) async {
@@ -153,25 +136,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     }).toList();
     if (changed) {
       await StorageService.saveRouters(updated);
-    }
-  }
-
-  void _resetActivity() {
-    _lastActivity = DateTime.now();
-  }
-
-  Future<void> _biometricUnlock() async {
-    final ok = await BiometricAuthService.authenticate();
-    if (!mounted) return;
-    if (ok) {
-      setState(() {
-        _locked = false;
-        _lastActivity = DateTime.now();
-      });
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(AppStrings.of(context).text('Не удалось разблокировать: попробуйте ещё раз')),
-      ));
     }
   }
 
@@ -360,7 +324,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   @override
   void dispose() {
-    _autoLockTimer?.cancel();
     ClientMonitor.instance.stop();
     pageController.dispose();
     super.dispose();
@@ -650,7 +613,7 @@ ListTile(
               const Spacer(),
               const Padding(
                 padding: EdgeInsets.all(16),
-                  child: Text('OPENWRT - Global v4.0.6\nРыбинскLAB', style: TextStyle(color: Colors.grey), textAlign: TextAlign.center),
+                  child: Text('OPENWRT - Global v4.0.7\nРыбинскLAB', style: TextStyle(color: Colors.grey), textAlign: TextAlign.center),
               ),
             ],
           ),
@@ -677,39 +640,6 @@ ListTile(
         destinations: destinations,
       ),
     );
-    return Stack(
-      children: [
-        Listener(
-          onPointerDown: (_) => _resetActivity(),
-          onPointerMove: (_) => _resetActivity(),
-          child: body,
-        ),
-        if (_locked)
-          Positioned.fill(
-            child: GestureDetector(
-              onTap: _biometricUnlock,
-              child: Container(
-                color: Theme.of(context).scaffoldBackgroundColor,
-                child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.lock_outline, size: 64, color: Theme.of(context).colorScheme.primary),
-                      const SizedBox(height: 24),
-                       Text(AppStrings.of(context).text('Приложение заблокировано'), style: const TextStyle(fontSize: 18)),
-                      const SizedBox(height: 16),
-                      FilledButton.icon(
-                        onPressed: _biometricUnlock,
-                        icon: const Icon(Icons.fingerprint),
-                         label: Text(AppStrings.of(context).text('Разблокировать')),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-      ],
-    );
+    return body;
   }
 }
