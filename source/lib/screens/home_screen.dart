@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/router_connection.dart';
 import '../services/openwrt_service.dart';
 import '../services/storage_service.dart';
 import '../services/client_monitor.dart';
+import '../services/biometric_auth_service.dart';
 import 'about_screen.dart';
 import 'dashboard_screen.dart';
 import 'monitor_screen.dart';
@@ -33,6 +35,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   int index = 0;
   bool _checkedDeps = false;
   bool _hideNonFunctional = false;
+  bool _locked = false;
+  DateTime _lastActivity = DateTime.now();
+  Timer? _autoLockTimer;
 
   final destinations = const [
     NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard), label: 'Обзор'),
@@ -48,6 +53,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   void initState() {
     super.initState();
     service = OpenWrtService(widget.config);
+    service.onVerifyHostKey = _verifyHostKey;
+    service.onFingerprintAccepted = (fp) => _saveFingerprint(fp);
     pageController = PageController(initialPage: 0);
     WidgetsBinding.instance.addPostFrameCallback((_) => _firstStartCheck());
     StorageService.isHideNonFunctionalSections().then((v) {
@@ -55,6 +62,108 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     });
     ClientMonitor.instance.onClientConnected = _onClientConnected;
     ClientMonitor.instance.start(service);
+    _startAutoLock();
+  }
+
+  void _startAutoLock() {
+    _autoLockTimer?.cancel();
+    _autoLockTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      if (!mounted) return;
+      if (_locked) return;
+      if (DateTime.now().difference(_lastActivity).inMinutes >= 5) {
+        setState(() => _locked = true);
+      }
+    });
+  }
+
+  Future<bool> _verifyHostKey(String fingerprint) async {
+    final host = widget.config.host;
+    // Если fingerprint уже сохранён в конфиге, сверяем.
+    if (widget.config.fingerprint != null && widget.config.fingerprint!.isNotEmpty) {
+      return widget.config.fingerprint == fingerprint;
+    }
+    // Ищем в отдельном хранилище.
+    final stored = await StorageService.loadFingerprint(host);
+    if (stored != null && stored.isNotEmpty) return stored == fingerprint;
+
+    final ok = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(children: [
+          Icon(Icons.verified_user_outlined),
+          SizedBox(width: 10),
+          Text('Проверка SSH ключа'),
+        ]),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Отпечаток (SHA256):'),
+            const SizedBox(height: 10),
+            SelectableText(
+              fingerprint,
+              style: const TextStyle(fontFamily: 'monospace'),
+            ),
+            const SizedBox(height: 12),
+            const Text('Принять ключ и сохранить для этого роутера?'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Принять'),
+          ),
+        ],
+      ),
+    );
+    return ok == true;
+  }
+
+  Future<void> _saveFingerprint(String fingerprint) async {
+    final host = widget.config.host;
+    // Всегда сохраняем в отдельное хранилище.
+    await StorageService.saveFingerprint(host, fingerprint);
+    // Обновляем в сохранённых конфигурациях роутеров.
+    final routers = await StorageService.loadRouters();
+    var changed = false;
+    final updated = routers.map((r) {
+      if (r.host != host) return r;
+      changed = true;
+      return RouterConnection(
+        name: r.name,
+        host: r.host,
+        port: r.port,
+        username: r.username,
+        password: r.password,
+        sshKey: r.sshKey,
+        useKey: r.useKey,
+        useHttps: r.useHttps,
+        fingerprint: fingerprint,
+      );
+    }).toList();
+    if (changed) {
+      await StorageService.saveRouters(updated);
+    }
+  }
+
+  void _resetActivity() {
+    _lastActivity = DateTime.now();
+  }
+
+  Future<void> _biometricUnlock() async {
+    final ok = await BiometricAuthService.authenticate();
+    if (ok && mounted) {
+      setState(() {
+        _locked = false;
+        _lastActivity = DateTime.now();
+      });
+    }
   }
 
   void _onClientConnected(Map<String, String> c) {
@@ -86,6 +195,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
     try {
       await service.connect();
+      await service.detectCapabilities();
       final pkg = await service.detectPackageManager();
       final allDeps = await service.checkDependencies();
       OpenWrtService.lastDepsStatus = allDeps;
@@ -240,6 +350,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   @override
   void dispose() {
+    _autoLockTimer?.cancel();
     ClientMonitor.instance.stop();
     pageController.dispose();
     super.dispose();
@@ -375,7 +486,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Scaffold(
+    final body = Scaffold(
       drawer: Drawer(
         child: SafeArea(
           child: Column(
@@ -527,7 +638,7 @@ ListTile(
               const Spacer(),
               const Padding(
                 padding: EdgeInsets.all(16),
-                child: Text('OPENWRT - Global v3.7.0\nРыбинскLAB', style: TextStyle(color: Colors.grey), textAlign: TextAlign.center),
+                child: Text('OPENWRT - Global v4.0.1\nРыбинскLAB', style: TextStyle(color: Colors.grey), textAlign: TextAlign.center),
               ),
             ],
           ),
@@ -553,6 +664,40 @@ ListTile(
         animationDuration: const Duration(milliseconds: 400),
         destinations: destinations,
       ),
+    );
+    return Stack(
+      children: [
+        Listener(
+          onPointerDown: (_) => _resetActivity(),
+          onPointerMove: (_) => _resetActivity(),
+          child: body,
+        ),
+        if (_locked)
+          Positioned.fill(
+            child: GestureDetector(
+              onTap: _biometricUnlock,
+              child: Container(
+                color: Theme.of(context).scaffoldBackgroundColor,
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.lock_outline, size: 64, color: Theme.of(context).colorScheme.primary),
+                      const SizedBox(height: 24),
+                      const Text('Приложение заблокировано', style: TextStyle(fontSize: 18)),
+                      const SizedBox(height: 16),
+                      FilledButton.icon(
+                        onPressed: _biometricUnlock,
+                        icon: const Icon(Icons.fingerprint),
+                        label: const Text('Разблокировать'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

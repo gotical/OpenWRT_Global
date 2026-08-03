@@ -1,10 +1,41 @@
 import 'dart:convert';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/router_connection.dart';
 
+/// Хранение данных приложения.
+///
+/// Секреты (пароли и ssh-ключи роутеров) хранятся только в Android Keystore
+/// через [FlutterSecureStorage]. В SharedPreferences остаются лишь
+/// неконфиденциальные настройки и несекретные поля конфигураций.
 class StorageService {
   static const String _routersKey = 'routers';
   static const String _selectedKey = 'selected_router';
+
+  // Keystore (AES-GCM), отдельная запись на хост.
+  static const FlutterSecureStorage _secure = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+  );
+
+  static String _pwKey(String host, String user) => 'router_pw_${host}_$user';
+  static String _keyKey(String host, String user) => 'router_key_${host}_$user';
+
+  // ---- Секреты в Keystore ----
+
+  static Future<void> _saveSecrets(RouterConnection r) async {
+    if (r.password.isNotEmpty) {
+      await _secure.write(key: _pwKey(r.host, r.username), value: r.password);
+    } else {
+      await _secure.delete(key: _pwKey(r.host, r.username));
+    }
+    if (r.sshKey != null && r.sshKey!.isNotEmpty) {
+      await _secure.write(key: _keyKey(r.host, r.username), value: r.sshKey!);
+    } else {
+      await _secure.delete(key: _keyKey(r.host, r.username));
+    }
+  }
+
+  // ---- Список роутеров ----
 
   static Future<List<RouterConnection>> loadRouters() async {
     final prefs = await SharedPreferences.getInstance();
@@ -12,18 +43,98 @@ class StorageService {
     if (raw == null || raw.isEmpty) return [];
     try {
       final list = jsonDecode(raw) as List;
-      return list.map((e) => RouterConnection.fromJson(e as Map<String, dynamic>)).toList();
+      final routers = list
+          .map((e) => RouterConnection.fromJson(e as Map<String, dynamic>))
+          .toList();
+      // Подтягиваем секреты из Keystore.
+      final out = <RouterConnection>[];
+      for (final r in routers) {
+        out.add(await _withSecrets(r));
+      }
+      return out;
     } catch (_) {
       return [];
     }
   }
 
+  static Future<bool> hasSavedSecrets(RouterConnection r) async {
+    try {
+      final pw = await _secure.read(key: _pwKey(r.host, r.username));
+      final key = await _secure.read(key: _keyKey(r.host, r.username));
+      return (pw != null && pw.isNotEmpty) || (key != null && key.isNotEmpty);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Возвращает копию конфигурации с секретами из Keystore.
+  static Future<RouterConnection> _withSecrets(RouterConnection r) async {
+    String pw = '';
+    String? key;
+    try {
+      pw = await _secure.read(key: _pwKey(r.host, r.username)) ?? '';
+      key = await _secure.read(key: _keyKey(r.host, r.username));
+    } catch (_) {}
+    return RouterConnection(
+      name: r.name,
+      host: r.host,
+      port: r.port,
+      username: r.username,
+      password: pw,
+      sshKey: key,
+      useKey: r.useKey,
+      useHttps: r.useHttps,
+      fingerprint: r.fingerprint,
+    );
+  }
+
   static Future<void> saveRouters(List<RouterConnection> routers) async {
+    // Сначала скрываем секреты в Keystore.
+    for (final r in routers) {
+      await _saveSecrets(r);
+    }
     final prefs = await SharedPreferences.getInstance();
-    final data = routers.map((r) => r.toJson()).toList();
+    // Сериализуем без секретов (toJson их не содержит).
+    final data = routers.map((r) => _publicJson(r)).toList();
     await prefs.setString(_routersKey, jsonEncode(data));
   }
 
+  static Map<String, dynamic> _publicJson(RouterConnection r) => {
+        'name': r.name,
+        'host': r.host,
+        'port': r.port,
+        'username': r.username,
+        'useKey': r.useKey,
+        'useHttps': r.useHttps,
+        'fingerprint': r.fingerprint,
+      };
+
+  /// Удаляет секреты роутера из Keystore (при удалении/очистке).
+  static Future<void> removeSecrets(String host, String username) async {
+    try {
+      await _secure.delete(key: _pwKey(host, username));
+      await _secure.delete(key: _keyKey(host, username));
+    } catch (_) {}
+  }
+
+  // ---- Отпечаток SSH ключа хоста ----
+
+  static Future<String?> loadFingerprint(String host) async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('fp_$host');
+  }
+
+  static Future<void> saveFingerprint(String host, String fingerprint) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('fp_$host', fingerprint);
+  }
+
+  static Future<void> removeFingerprint(String host) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('fp_$host');
+  }
+
+  // --- процедурные заготовки (устарели, удалены) ---
   static Future<int> loadSelectedIndex() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getInt(_selectedKey) ?? 0;
@@ -148,13 +259,12 @@ class StorageService {
   }
 
   static Future<String?> loadApiKey(String provider) async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('api_key_$provider');
+    // API-ключи AI — чувствительные данные → Keystore.
+    try { return await _secure.read(key: 'api_key_$provider'); } catch (_) { return null; }
   }
 
   static Future<void> saveApiKey(String provider, String key) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('api_key_$provider', key);
+    await _secure.write(key: 'api_key_$provider', value: key);
   }
 
   static Future<String?> loadActiveAiProvider() async {

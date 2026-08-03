@@ -7,6 +7,7 @@ class RouterConnection {
   final String? sshKey;
   final bool useKey;
   final bool useHttps;
+  final String? fingerprint;
 
   RouterConnection({
     required this.name,
@@ -17,6 +18,7 @@ class RouterConnection {
     this.sshKey,
     this.useKey = false,
     this.useHttps = false,
+    this.fingerprint,
   });
 
   Map<String, dynamic> toJson() => {
@@ -24,10 +26,11 @@ class RouterConnection {
         'host': host,
         'port': port,
         'username': username,
-        'password': password,
-        'sshKey': sshKey,
+        // Пароль и ssh-ключ НЕ сохраняются в открытом JSON —
+        // секреты хранятся отдельно в Android Keystore (flutter_secure_storage).
         'useKey': useKey,
         'useHttps': useHttps,
+        'fingerprint': fingerprint,
       };
 
   factory RouterConnection.fromJson(Map<String, dynamic> json) => RouterConnection(
@@ -35,9 +38,11 @@ class RouterConnection {
         host: json['host'] ?? '',
         port: json['port'] ?? 22,
         username: json['username'] ?? 'root',
-        password: json['password'] ?? '',
-        sshKey: json['sshKey']?.toString(),
+        // Секреты не храним в открытом JSON (они подтягиваются из Keystore в StorageService).
+        password: '',
+        sshKey: null,
         useKey: json['useKey'] == true,
         useHttps: json['useHttps'] ?? false,
+        fingerprint: json['fingerprint']?.toString(),
       );
 }

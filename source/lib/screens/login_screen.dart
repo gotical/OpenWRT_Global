@@ -32,6 +32,8 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
 
   @override
   void dispose() {
+    // Очистка буфера обмена от возможных паролей.
+    Clipboard.setData(const ClipboardData(text: ''));
     _anim.dispose();
     _name.dispose(); _host.dispose(); _port.dispose(); _user.dispose(); _pass.dispose(); _keyCtrl.dispose();
     super.dispose();
@@ -51,9 +53,88 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     setState(() {});
   }
 
+  Future<bool> _verifyHostKey(String fingerprint) async {
+    final host = _host.text.trim();
+    // Ищем в сохранённых конфигурациях роутера.
+    for (final r in routers) {
+      if (r.host == host && r.fingerprint != null && r.fingerprint!.isNotEmpty) {
+        return r.fingerprint == fingerprint;
+      }
+    }
+    // Затем — в отдельном хранилище (для ещё не сохранённых роутеров).
+    final stored = await StorageService.loadFingerprint(host);
+    if (stored != null && stored.isNotEmpty) return stored == fingerprint;
+
+    final ok = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(children: [
+          Icon(Icons.verified_user_outlined),
+          SizedBox(width: 10),
+          Text('Проверка SSH ключа'),
+        ]),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Отпечаток (SHA256):'),
+            const SizedBox(height: 10),
+            SelectableText(
+              fingerprint,
+              style: const TextStyle(fontFamily: 'monospace'),
+            ),
+            const SizedBox(height: 12),
+            const Text('Принять ключ и сохранить для этого роутера?'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Принять'),
+          ),
+        ],
+      ),
+    );
+    return ok == true;
+  }
+
+  Future<void> _saveFingerprintForHost(String host, String fingerprint) async {
+    // Всегда сохраняем в отдельное хранилище.
+    await StorageService.saveFingerprint(host, fingerprint);
+    // Обновляем в сохранённых конфигурациях роутеров, если уже есть.
+    final routers = await StorageService.loadRouters();
+    var changed = false;
+    final updated = routers.map((r) {
+      if (r.host != host) return r;
+      changed = true;
+      return RouterConnection(
+        name: r.name,
+        host: r.host,
+        port: r.port,
+        username: r.username,
+        password: r.password,
+        sshKey: r.sshKey,
+        useKey: r.useKey,
+        useHttps: r.useHttps,
+        fingerprint: fingerprint,
+      );
+    }).toList();
+    if (changed) {
+      await StorageService.saveRouters(updated);
+    }
+  }
+
   Future<void> _del(int i) async {
+    final r = routers[i];
     routers.removeAt(i);
     await StorageService.saveRouters(routers);
+    await StorageService.removeSecrets(r.host, r.username);
     setState(() {});
   }
 
@@ -194,14 +275,19 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
 
   Future<void> _generateKey(BuildContext ctx, StateSetter setSt) async {
     // Сначала подключаемся по паролю
+    final host = _host.text.trim();
     final config = RouterConnection(
       name: _name.text.trim(),
-      host: _host.text.trim(),
+      host: host,
       port: int.tryParse(_port.text) ?? 22,
       username: _user.text.trim(),
       password: _pass.text,
+      // Подтягиваем сохранённый fingerprint, чтобы не переспрашивать.
+      fingerprint: await StorageService.loadFingerprint(host),
     );
     final service = OpenWrtService(config);
+    service.onVerifyHostKey = _verifyHostKey;
+    service.onFingerprintAccepted = (fp) => _saveFingerprintForHost(config.host, fp);
     setSt(() {});
     try {
       await service.connect();

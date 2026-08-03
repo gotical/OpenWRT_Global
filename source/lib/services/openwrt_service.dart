@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:dartssh2/dartssh2.dart';
 import '../models/router_connection.dart';
 import '../models/system_info.dart';
@@ -9,9 +10,24 @@ import '../models/package_info.dart';
 import '../models/network_info.dart';
 import '../models/vpn_info.dart';
 import '../models/channel_scan_result.dart';
+import '../models/openwrt_capabilities.dart';
+import 'app_logger.dart';
 
 class OpenWrtService {
   final RouterConnection config;
+
+  /// Колбэк проверки host key при первом подключении к новому хосту.
+  /// Получает fingerprint (например "SHA256:..."), возвращает true — принять.
+  /// Если null — проверка пропускается (для совместимости).
+  Future<bool> Function(String fingerprint)? onVerifyHostKey;
+
+  /// Вызывается после того, как пользователь принял fingerprint нового хоста.
+  /// Позволяет сохранить его в настройках роутера.
+  Future<void> Function(String fingerprint)? onFingerprintAccepted;
+
+  /// Кэшированные возможности OpenWrt (определяются при первом подключении).
+  OpenWrtCapabilities? _capabilities;
+
   static Map<String, bool> lastDepsStatus = {};
   SSHClient? _client;
   bool _connected = false;
@@ -45,6 +61,27 @@ class OpenWrtService {
       try {
         final socket = await SSHSocket.connect(config.host, config.port)
             .timeout(const Duration(seconds: 15));
+        // Проверка fingerprint хоста (MITM-защита).
+        // dartssh2 передаёт fingerprint как UTF-8 строку "SHA256:<base64>".
+        final verify = onVerifyHostKey;
+        final accepted = onFingerprintAccepted;
+        FutureOr<bool> Function(String type, Uint8List fpBytes)? onVerify;
+        if (verify != null) {
+          onVerify = (String type, Uint8List fpBytes) async {
+            final fp = utf8.decode(fpBytes);
+            // Если уже ожидаем конкретный fingerprint — сверяем строго.
+            if (config.fingerprint != null && config.fingerprint!.isNotEmpty) {
+              if (fp == config.fingerprint) return true;
+              return await verify(fp);
+            }
+            // Иначе спрашиваем пользователя.
+            final ok = await verify(fp);
+            if (ok && accepted != null) {
+              await accepted(fp);
+            }
+            return ok;
+          };
+        }
         if (config.useKey && config.sshKey != null && config.sshKey!.isNotEmpty) {
           final keyPairs = SSHKeyPair.fromPem(config.sshKey!);
           _client = SSHClient(
@@ -52,19 +89,23 @@ class OpenWrtService {
             username: config.username,
             identities: keyPairs,
             onPasswordRequest: () => null,
+            onVerifyHostKey: onVerify,
           );
         } else {
           _client = SSHClient(
             socket,
             username: config.username,
             onPasswordRequest: () => config.password,
+            onVerifyHostKey: onVerify,
           );
         }
         await _client!.run('echo ok').timeout(const Duration(seconds: 15));
         _startKeepAlive();
         _connected = true;
+        AppLogger.i('SSH connected to ${config.host}:${config.port}');
       } catch (e) {
         _connected = false;
+        AppLogger.e('SSH connect failed to ${config.host}', e);
         throw Exception('Ошибка подключения SSH: ${e.toString().replaceAll(config.password, '***')}');
       }
     }();
@@ -83,13 +124,26 @@ class OpenWrtService {
       try {
         await _enqueue(() => _client!.run('echo keepalive').timeout(const Duration(seconds: 10)));
       } catch (_) {
+        // Автоматическое переподключение при потере связи.
+        AppLogger.w('Keepalive lost, reconnecting to ${config.host}');
         _connected = false;
+        try {
+          _keepAliveTimer?.cancel();
+          _keepAliveTimer = null;
+          _client?.close();
+          _client = null;
+          await _connectInternal();
+          _startKeepAlive();
+        } catch (e) {
+          AppLogger.e('Auto-reconnect failed', e);
+        }
       }
     });
   }
 
   Future<void> reconnect() {
     return _enqueue(() async {
+      _capabilities = null;
       _keepAliveTimer?.cancel();
       _keepAliveTimer = null;
       _client?.close();
@@ -101,6 +155,7 @@ class OpenWrtService {
 
   Future<void> disconnect() {
     return _enqueue(() async {
+      AppLogger.i('Disconnecting from ${config.host}');
       _keepAliveTimer?.cancel();
       _keepAliveTimer = null;
       _client?.close();
@@ -136,6 +191,39 @@ class OpenWrtService {
       } catch (e2) {
         throw Exception('SSH ошибка: ${e2.toString().replaceAll(config.password, '***')}');
       }
+    }
+  }
+
+  /// Определяет версию и возможности OpenWrt (кэшируется).
+  Future<OpenWrtCapabilities> detectCapabilities() async {
+    if (_capabilities != null) return _capabilities!;
+    try {
+      final raw = await runCommand('cat /etc/openwrt_release 2>/dev/null || cat /etc/lsb-release 2>/dev/null');
+      _capabilities = OpenWrtCapabilities.fromRelease(raw);
+    } catch (_) {
+      _capabilities = OpenWrtCapabilities();
+    }
+    return _capabilities!;
+  }
+
+  OpenWrtCapabilities? get capabilities => _capabilities;
+
+  /// Возвращает правильную команду с учётом версии OpenWrt.
+  Future<String> compatCmd(String operation) async {
+    final caps = await detectCapabilities();
+    switch (operation) {
+      case 'wifi_scan':
+        return caps.hasIwinfo ? 'iwinfo scan 2>/dev/null' : 'iw dev \$(iw dev 2>/dev/null | grep Interface | awk \'{print \$2}\') scan 2>/dev/null';
+      case 'wifi_status':
+        return caps.hasIwinfo ? 'iwinfo 2>/dev/null' : 'iw dev 2>/dev/null';
+      case 'firewall_list':
+        return caps.hasFirewall4 ? 'fw4 list 2>/dev/null' : 'fw3 list 2>/dev/null';
+      case 'nft_rules':
+        return caps.hasNftables ? 'nft list ruleset 2>/dev/null' : 'iptables-save 2>/dev/null';
+      case 'switch_status':
+        return caps.hasDsa ? 'ls /sys/class/net/ 2>/dev/null' : 'swconfig list 2>/dev/null';
+      default:
+        return operation;
     }
   }
 

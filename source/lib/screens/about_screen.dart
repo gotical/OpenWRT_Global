@@ -65,7 +65,7 @@ class AboutScreen extends StatelessWidget {
                 const SizedBox(height: 4),
                 Center(
                   child: Text(
-                    'Версия 3.10.1',
+                    'Версия 4.0.1',
                     style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                   ),
                 ),

@@ -2,9 +2,13 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'screens/login_screen.dart';
+import 'services/di_container.dart';
+import 'services/secure_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  setupDi();
+  SecureScreen.enable();
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
     systemNavigationBarColor: Colors.transparent,

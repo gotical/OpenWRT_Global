@@ -31,3 +31,4 @@ source/android/app/release/
 # Бинарные артефакты сборки (публикуются через GitHub Release)
 app.zip
 /releases/*.apk
+*.apk

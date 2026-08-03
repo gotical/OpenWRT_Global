@@ -1,7 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import '../models/network_info.dart';
 import '../services/openwrt_service.dart';
 import '../services/storage_service.dart';
+import '../services/backup_service.dart';
+import '../services/notification_service.dart';
+import '../services/device_security.dart';
+import '../services/ai_analysis_service.dart';
 import 'about_screen.dart';
 import 'login_screen.dart';
 import 'usb_browser_screen.dart';
@@ -175,7 +181,14 @@ class _SystemScreenState extends State<SystemScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text('Системные логи', style: Theme.of(ctx).textTheme.titleLarge),
-                  IconButton(onPressed: () => Navigator.pop(ctx), icon: const Icon(Icons.close)),
+                  Row(children: [
+                    IconButton(
+                      onPressed: () => _aiAnalyzeLogs(ctx, logs),
+                      tooltip: 'AI анализ',
+                      icon: const Icon(Icons.smart_toy),
+                    ),
+                    IconButton(onPressed: () => Navigator.pop(ctx), icon: const Icon(Icons.close)),
+                  ]),
                 ],
               ),
             ),
@@ -192,6 +205,33 @@ class _SystemScreenState extends State<SystemScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Future<void> _aiAnalyzeLogs(BuildContext ctx, List<String> logs) async {
+    await AiAnalysisService.init();
+    final key = await StorageService.loadApiKey(await StorageService.loadActiveAiProvider() ?? 'deepseek');
+    if (key == null || key.isEmpty) {
+      _snack('Настройте API-ключ в «AI-ассистент»');
+      return;
+    }
+    final logText = logs.take(60).join('\n');
+    await showDialog(
+      context: ctx,
+      builder: (dctx) => const AlertDialog(
+        content: Row(children: [CircularProgressIndicator(), SizedBox(width: 16), Text('AI анализ логов...')]),
+      ),
+    );
+    final result = await AiAnalysisService.analyzeLog(logText);
+    if (!mounted) return;
+    Navigator.pop(ctx);
+    await showDialog(
+      context: context,
+      builder: (dctx) => AlertDialog(
+        title: const Text('AI анализ логов'),
+        content: SingleChildScrollView(child: Text(result ?? 'Нет ответа от AI', style: const TextStyle(fontSize: 13))),
+        actions: [TextButton(onPressed: () => Navigator.pop(dctx), child: const Text('Закрыть'))],
       ),
     );
   }
@@ -394,6 +434,173 @@ class _SystemScreenState extends State<SystemScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _showAiAnalysis() async {
+    await AiAnalysisService.init();
+    if (await StorageService.loadApiKey(await StorageService.loadActiveAiProvider() ?? 'deepseek') == null) {
+      _snack('Сначала настройте API-ключ в «AI-ассистент»');
+      _setupAiKey();
+      return;
+    }
+    _showProgress('AI анализ...');
+    try {
+      final sysInfo = await widget.service.fetchSystemInfo();
+      final caps = await widget.service.detectCapabilities();
+      final aiContext = 'OpenWrt ${caps.version}, ${caps.target}\n'
+          'RAM: ${sysInfo.memoryUsed}/${sysInfo.memoryTotal} MB\n'
+          'CPU load: ${sysInfo.cpuLoad}\n'
+          'Uptime: ${sysInfo.uptime}';
+      final result = await AiAnalysisService.getRecommendations(aiContext);
+      if (!mounted) return;
+      Navigator.pop(context);
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Row(children: [Icon(Icons.smart_toy), SizedBox(width: 8), Text('AI рекомендации')]),
+          content: SingleChildScrollView(child: Text(result ?? 'Нет ответа от AI', style: const TextStyle(fontSize: 14))),
+          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Закрыть'))],
+        ),
+      );
+    } catch (e) {
+      if (mounted) { Navigator.pop(context); _snack('Ошибка: $e'); }
+    }
+  }
+
+  Future<void> _showBackupDialog() async {
+    final pwdCtrl = TextEditingController();
+    final dataCtrl = TextEditingController();
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Бэкап конфигурации'),
+        content: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const Text('Экспорт или импорт конфигураций роутеров с AES-256 шифрованием.'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: pwdCtrl,
+              obscureText: true,
+              decoration: const InputDecoration(labelText: 'Пароль шифрования'),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: dataCtrl,
+              maxLines: 3,
+              decoration: const InputDecoration(labelText: 'Данные (для импорта)'),
+            ),
+          ]),
+        ),
+        actions: [
+          TextButton(onPressed: () async {
+            if (pwdCtrl.text.isEmpty) return;
+            final routers = await StorageService.loadRouters();
+            final data = routers.map((r) => r.toJson()).toList();
+            final encrypted = BackupService.exportToJson({'routers': data, 'version': '4.0.1'}, pwdCtrl.text);
+            await showDialog(
+              context: ctx,
+              builder: (ctx) => AlertDialog(
+                title: const Text('QR-код резервной копии'),
+                content: SingleChildScrollView(
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    const Text('Отсканируйте QR для импорта на другое устройство'),
+                    const SizedBox(height: 12),
+                    QrImageView(data: encrypted, size: 200),
+                    const SizedBox(height: 12),
+                    SelectableText(encrypted, style: const TextStyle(fontSize: 10, fontFamily: 'monospace')),
+                  ]),
+                ),
+                actions: [
+                  TextButton(onPressed: () async {
+                    await Clipboard.setData(ClipboardData(text: encrypted));
+                    if (ctx.mounted) _snack('Скопировано в буфер');
+                  }, child: const Text('Копировать')),
+                  TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Закрыть')),
+                ],
+              ),
+            );
+          }, child: const Text('Экспорт QR')),
+          TextButton(onPressed: () async {
+            if (pwdCtrl.text.isEmpty || dataCtrl.text.isEmpty) return;
+            try {
+              final decrypted = BackupService.importFromJson(dataCtrl.text, pwdCtrl.text);
+              if (decrypted['routers'] is List) {
+                _snack('Импорт успешен: ${(decrypted['routers'] as List).length} конфигураций');
+              }
+            } catch (e) {
+              _snack('Ошибка импорта: неверный пароль или данные');
+            }
+          }, child: const Text('Импорт')),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Закрыть')),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _setupNotifications() async {
+    final enabled = await StorageService.isNotificationsEnabled();
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Уведомления'),
+        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('Получать уведомления о состоянии роутера:'),
+          const SizedBox(height: 12),
+          const Text('• Высокая температура CPU'),
+          const Text('• Высокая загрузка CPU / RAM'),
+          const Text('• Потеря WAN подключения'),
+          const Text('• Отключение VPN'),
+          const Text('• Доступны обновления прошивки'),
+          const SizedBox(height: 12),
+          SwitchListTile(
+            title: const Text('Включить уведомления'),
+            value: enabled,
+            onChanged: (v) async {
+              await StorageService.setNotificationsEnabled(v);
+              if (v) await NotificationService.init();
+              if (ctx.mounted) Navigator.pop(ctx);
+            },
+          ),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Закрыть')),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showSecurityStatus() async {
+    final root = await DeviceSecurity.isRooted();
+    final emu = await DeviceSecurity.isEmulator();
+    final debug = await DeviceSecurity.isDebug();
+    final proxy = await DeviceSecurity.isProxySet();
+    if (!mounted) return;
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(children: [Icon(Icons.security), SizedBox(width: 8), Text('Безопасность')]),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          _secRow('Root доступ', root),
+          const SizedBox(height: 8),
+          _secRow('Эмулятор', emu),
+          const SizedBox(height: 8),
+          _secRow('Режим отладки', debug),
+          const SizedBox(height: 8),
+          _secRow('HTTP Proxy', proxy),
+        ]),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Закрыть'))],
+      ),
+    );
+  }
+
+  Widget _secRow(String label, bool detected) {
+    return Row(children: [
+      Icon(detected ? Icons.warning_amber : Icons.check_circle, color: detected ? Colors.red : Colors.green, size: 20),
+      const SizedBox(width: 12),
+      Text(label, style: const TextStyle(fontSize: 16)),
+      const Spacer(),
+      Text(detected ? 'ОБНАРУЖЕНО' : 'Не обнаружено', style: TextStyle(color: detected ? Colors.red : Colors.green, fontWeight: FontWeight.w600)),
+    ]);
   }
 
   Future<void> _showDnsDialog() async {
@@ -716,24 +923,6 @@ class _SystemScreenState extends State<SystemScreen> {
       'dp': dport.text.trim(),
       'enabled': enabled ? '1' : '0',
     };
-  }
-
-  Future<void> _showBackupDialog() async {
-    _showProgress('Создание бэкапа...');
-    try {
-      final b64 = await widget.service.backupConfig();
-      if (!mounted) return;
-      Navigator.pop(context);
-      showDialog(context: context, builder: (ctx) => AlertDialog(
-        title: const Text('Бэкап конфигурации'),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('Конфиг в base64 (скопируйте):'),
-          const SizedBox(height: 8),
-          SelectableText(b64, style: const TextStyle(fontFamily: 'monospace', fontSize: 10)),
-        ]),
-        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
-      ));
-    } catch (e) { if (mounted) { Navigator.pop(context); _snack('$e'); } }
   }
 
   Future<void> _showWolDialog() async {
@@ -1075,8 +1264,6 @@ class _SystemScreenState extends State<SystemScreen> {
                     const SizedBox(height: 12),
                     _ActionCard(icon: Icons.router, title: 'Проброс портов', subtitle: 'Firewall redirects', onTap: _showPortForwards),
                     const SizedBox(height: 12),
-                    _ActionCard(icon: Icons.backup, title: 'Бэкап конфигурации', subtitle: 'Скачать / восстановить', onTap: _showBackupDialog),
-                    const SizedBox(height: 12),
                     if (_showCard('wol'))
                       _ActionCard(icon: Icons.power_settings_new, title: 'Wake-on-LAN', subtitle: 'Разбудить устройство по MAC',
                         warning: _depMissing('wol') ? 'wol/etherwake не установлен' : null,
@@ -1099,7 +1286,15 @@ class _SystemScreenState extends State<SystemScreen> {
                     const SizedBox(height: 12),
                     _ActionCard(icon: Icons.dns, title: 'DNS', subtitle: 'Настройка DNS-серверов', onTap: _showDnsDialog),
                     const SizedBox(height: 12),
+                    _ActionCard(icon: Icons.backup, title: 'Бэкап конфигурации', subtitle: 'AES-256 экспорт/импорт', onTap: _showBackupDialog),
+                    const SizedBox(height: 12),
+                    _ActionCard(icon: Icons.notifications, title: 'Уведомления', subtitle: 'мониторинг роутера', onTap: _setupNotifications),
+                    const SizedBox(height: 12),
+                    _ActionCard(icon: Icons.security, title: 'Безопасность устройства', subtitle: 'Root/эмулятор/отладка', onTap: _showSecurityStatus),
+                    const SizedBox(height: 12),
                     _ActionCard(icon: Icons.smart_toy, title: 'AI-ассистент', subtitle: 'OpenRouter / DeepSeek', onTap: _setupAiKey),
+                    const SizedBox(height: 12),
+                    _ActionCard(icon: Icons.analytics, title: 'AI анализ', subtitle: 'Логи/безопасность/производительность', onTap: _showAiAnalysis),
                     const SizedBox(height: 12),
                     _ActionCard(icon: Icons.info_outline, title: 'О приложении', subtitle: 'РыбинскLAB • Усачёв Денис',
                       onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AboutScreen()))),
