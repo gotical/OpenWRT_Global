@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../l10n/app_strings.dart';
+import '../main.dart';
 
 class AboutScreen extends StatelessWidget {
   const AboutScreen({super.key});
@@ -20,11 +22,13 @@ class AboutScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final strings = AppStrings.of(context);
+    final currentLanguage = Localizations.localeOf(context).languageCode;
     return Scaffold(
       body: CustomScrollView(
         physics: const BouncingScrollPhysics(),
         slivers: [
-          SliverAppBar.large(title: const Text('О приложении')),
+          SliverAppBar.large(title: Text(strings.about)),
           SliverPadding(
             padding: const EdgeInsets.all(20),
             sliver: SliverList(
@@ -64,18 +68,40 @@ class AboutScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Center(
-                  child: Text(
-                    'Версия 4.0.1',
+                   child: Text(
+                     '${strings.version} 4.0.2',
                     style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                   ),
+                 ),
+                 const SizedBox(height: 32),
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.language),
+                    title: Text(strings.language),
+                    trailing: DropdownButton<String>(
+                      value: currentLanguage,
+                      underline: const SizedBox.shrink(),
+                      items: AppStrings.languageNames.entries
+                          .map((entry) => DropdownMenuItem(
+                                value: entry.key,
+                                child: Text(entry.value),
+                              ))
+                          .toList(),
+                      onChanged: (code) {
+                        if (code != null) {
+                          OpenWrtManagerApp.of(context)?.setLocale(Locale(code));
+                        }
+                      },
+                    ),
+                  ),
                 ),
-                const SizedBox(height: 32),
+                const SizedBox(height: 16),
                 Card(
                   child: Column(
                     children: [
                       ListTile(
                         leading: const Icon(Icons.business),
-                        title: const Text('Разработчик'),
+                         title: Text(strings.developer),
                         subtitle: const Text('РыбинскLAB'),
                         trailing: IconButton(
                           icon: const Icon(Icons.open_in_new),
@@ -93,7 +119,7 @@ class AboutScreen extends StatelessWidget {
                       const Divider(height: 1),
                       ListTile(
                         leading: const Icon(Icons.link),
-                        title: const Text('Исходный код'),
+                         title: Text(strings.sourceCode),
                         subtitle: const Text('github.com/USAchevIP/OpenWRT_Global'),
                         trailing: const Icon(Icons.open_in_new),
                         onTap: () => _openUrl('https://github.com/USAchevIP/OpenWRT_Global'),
@@ -108,7 +134,7 @@ class AboutScreen extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Возможности', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                         Text(strings.features, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
                         const SizedBox(height: 8),
                         const Text(
                           '• Дашборд с CPU/RAM/uptime и графиками\n'
@@ -139,7 +165,7 @@ class AboutScreen extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Благодарности', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                         Text(strings.acknowledgements, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
                         const SizedBox(height: 8),
                         const Text(
                           'Начиная с версии 3.9.0 в приложении используется код, изученный '

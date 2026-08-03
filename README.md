@@ -3,7 +3,7 @@
 Мобильное приложение для управления роутерами OpenWRT через SSH.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Release](https://img.shields.io/badge/release-v3.8.4-brightgreen)](https://github.com/USAchevIP/OpenWRT_Global/releases/latest)
+[![Release](https://img.shields.io/badge/release-v4.0.2-brightgreen)](https://github.com/gotical/OpenWRT_Global/releases/latest)
 [![Android](https://img.shields.io/badge/Android-7.0%2B-green)](https://github.com/USAchevIP/OpenWRT_Global/releases/latest)
 
 🌐 [rybinsklab.ru/openwrt](https://rybinsklab.ru/openwrt/) | 📱 [4PDA](https://4pda.to/forum/index.php?showtopic=911457&view=findpost&p=144455263)
@@ -98,6 +98,34 @@ No LuCI or other web interfaces required on the router. Everything works through
 
 ---
 
+## Беларуская
+
+**OpenWRT Global — Manager** — бясплатная праграма з адкрытым зыходным кодам для кіравання маршрутызатарамі OpenWRT, ImmortalWrt, FriendlyWrt і LEDE праз SSH.
+
+Не патрабуе ўсталявання LuCI або іншага вэб-інтэрфейсу на маршрутызатары. Усё працуе праз стандартныя SSH і ubus.
+
+### Магчымасці
+
+- **🌐 Інтэрнэт і WAN** — DHCP, PPPoE, WiFi as WAN і публічны IP
+- **📡 Wi-Fi** — кіраванне радыёмодулямі, каналамі, шырынёй, WPA2/WPA3 і гасцявой сеткай
+- **🤖 AI-аптымізацыя Wi-Fi** — аналіз эфіру праз DeepSeek / OpenRouter
+- **🔒 VPN** — WireGuard, AmneziaWG, OpenVPN, SSTP, PPTP, L2TP/IPsec і IKEv2/IPsec
+- **🛡 Бяспека** — файрвол, перанакіраванне партоў, VLAN, блакіроўка кліентаў і Wake-on-LAN
+- **👥 Кліенты** — DHCP-спіс, ідэнтыфікацыя прылад і маніторынг злучэнняў
+- **🌐 DNS** — DNS, DoH, DoT, AdGuard Home і DDNS
+- **🖥 Сістэма** — SSH-тэрмінал, абнаўленні, логі, рэзервовыя копіі і USB-прылады
+- **📦 Пакетны менеджар** — OPKG і APK
+- **✅ Сумяшчальнасць** — OpenWRT, ImmortalWrt, FriendlyWrt і LEDE версій 19.07–24.10
+
+---
+
+## Версия 4.0.2
+
+- Дададзены выбар мовы: руская, украінская, казахская і беларуская.
+- Дадана захаванне выбранай мовы паміж запусках.
+- Дададзены пераклады асноўнай навігацыі, экрана ўваходу і раздзела «Пра праграму».
+- Выпраўленыя залежнасці лакалізацыі Flutter і абноўлена версія APK.
+
 ## Сборка / Build
 
 ```bash
@@ -112,7 +140,7 @@ flutter build apk --release
 |--------|--------|
 | 🌐 Сайт приложения | [rybinsklab.ru/openwrt](https://rybinsklab.ru/openwrt/) |
 | 📱 4PDA | [4pda.to/forum](https://4pda.to/forum/index.php?showtopic=911457&view=findpost&p=144455263) |
-| 📦 GitHub Releases | [github.com/USAchevIP/OpenWRT_Global/releases](https://github.com/USAchevIP/OpenWRT_Global/releases) |
+| 📦 GitHub Releases | [github.com/gotical/OpenWRT_Global/releases](https://github.com/gotical/OpenWRT_Global/releases) |
 
 ## Лицензия / License
 

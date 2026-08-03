@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../l10n/app_strings.dart';
 import '../models/router_connection.dart';
 import '../services/storage_service.dart';
 import '../services/openwrt_service.dart';
@@ -147,6 +148,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   }
 
   void _sheet([RouterConnection? cfg, int? idx]) {
+    final s = AppStrings.of(context);
     if (cfg != null) {
       _name.text = cfg.name; _host.text = cfg.host; _port.text = cfg.port.toString();
       _user.text = cfg.username; _pass.text = cfg.password;
@@ -170,16 +172,16 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
               child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Theme.of(ctx).colorScheme.outlineVariant, borderRadius: BorderRadius.circular(2)))),
                 const SizedBox(height: 20),
-                Text(cfg == null ? 'Добавить роутер' : 'Изменить', style: Theme.of(ctx).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+                Text(cfg == null ? s.addRouter : 'Изменить', style: Theme.of(ctx).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 20),
-                TextFormField(controller: _name, decoration: const InputDecoration(labelText: 'Название', prefixIcon: Icon(Icons.label)), validator: (v) => v == null || v.isEmpty ? 'Обязательно' : null),
+                TextFormField(controller: _name, decoration: InputDecoration(labelText: s.name, prefixIcon: const Icon(Icons.label)), validator: (v) => v == null || v.isEmpty ? 'Обязательно' : null),
                 const SizedBox(height: 12),
-                TextFormField(controller: _host, decoration: const InputDecoration(labelText: 'IP-адрес или домен', prefixIcon: Icon(Icons.router)), validator: (v) => v == null || v.isEmpty ? 'Обязательно' : null),
+                TextFormField(controller: _host, decoration: InputDecoration(labelText: s.host, prefixIcon: const Icon(Icons.router)), validator: (v) => v == null || v.isEmpty ? 'Обязательно' : null),
                 const SizedBox(height: 12),
                 Row(children: [
-                  Expanded(flex: 2, child: TextFormField(controller: _port, decoration: const InputDecoration(labelText: 'Порт', prefixIcon: Icon(Icons.dialpad)), keyboardType: TextInputType.number, validator: (v) => v == null || v.isEmpty ? 'Обязательно' : null)),
+                  Expanded(flex: 2, child: TextFormField(controller: _port, decoration: InputDecoration(labelText: s.port, prefixIcon: const Icon(Icons.dialpad)), keyboardType: TextInputType.number, validator: (v) => v == null || v.isEmpty ? 'Обязательно' : null)),
                   const SizedBox(width: 12),
-                  Expanded(flex: 3, child: TextFormField(controller: _user, decoration: const InputDecoration(labelText: 'Пользователь', prefixIcon: Icon(Icons.person)), validator: (v) => v == null || v.isEmpty ? 'Обязательно' : null)),
+                  Expanded(flex: 3, child: TextFormField(controller: _user, decoration: InputDecoration(labelText: s.username, prefixIcon: const Icon(Icons.person)), validator: (v) => v == null || v.isEmpty ? 'Обязательно' : null)),
                 ]),
                 const SizedBox(height: 12),
                 // Переключатель: пароль / ключ
@@ -193,7 +195,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                       SwitchListTile(
                         value: _useKey,
                         onChanged: (v) => setSt(() => _useKey = v),
-                        title: const Text('SSH-ключ', style: TextStyle(fontSize: 14)),
+                         title: Text(s.sshKey, style: const TextStyle(fontSize: 14)),
                         subtitle: Text(_useKey ? 'Войдите по ключу (PEM)' : 'Войдите по паролю', style: TextStyle(fontSize: 12, color: Theme.of(ctx).colorScheme.onSurfaceVariant)),
                         secondary: Icon(_useKey ? Icons.vpn_key : Icons.lock),
                       ),
@@ -203,7 +205,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                           child: TextFormField(
                             controller: _pass, obscureText: _obscure,
                             decoration: InputDecoration(
-                              labelText: 'Пароль',
+                               labelText: s.password,
                               prefixIcon: const Icon(Icons.lock, size: 20),
                               suffixIcon: IconButton(icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility, size: 20), onPressed: () => setSt(() => _obscure = !_obscure)),
                               isDense: true,
@@ -253,7 +255,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                 const SizedBox(height: 24),
                 FilledButton(onPressed: () {
                   if (_form.currentState!.validate()) {
-                    _save(RouterConnection(
+                     _save(RouterConnection(
                       name: _name.text.trim(),
                       host: _host.text.trim(),
                       port: int.tryParse(_port.text) ?? 22,
@@ -264,7 +266,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                     ));
                     Navigator.pop(ctx);
                   }
-                }, child: Text(cfg == null ? 'Добавить' : 'Сохранить')),
+                 }, child: Text(cfg == null ? s.addRouter : s.save)),
               ]),
             ),
           ),
@@ -314,6 +316,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
+    final s = AppStrings.of(context);
     return Scaffold(
       body: SafeArea(
         child: CustomScrollView(
@@ -339,9 +342,9 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                   child: Column(mainAxisSize: MainAxisSize.min, children: [
                     Icon(Icons.router_outlined, size: 96, color: t.colorScheme.outline.withValues(alpha: 0.4)),
                     const SizedBox(height: 20),
-                    Text('Нет сохранённых роутеров', style: t.textTheme.titleMedium),
+                     Text(s.noRouters, style: t.textTheme.titleMedium),
                     const SizedBox(height: 24),
-                    FilledButton.tonalIcon(onPressed: () => _sheet(), icon: const Icon(Icons.add), label: const Text('Добавить роутер')),
+                     FilledButton.tonalIcon(onPressed: () => _sheet(), icon: const Icon(Icons.add), label: Text(s.addRouter)),
                   ]),
                 ),
               )
@@ -387,7 +390,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
           ],
         ),
       ),
-      floatingActionButton: routers.isEmpty ? null : FloatingActionButton.extended(onPressed: () => _sheet(), icon: const Icon(Icons.add), label: const Text('Добавить')),
+       floatingActionButton: routers.isEmpty ? null : FloatingActionButton.extended(onPressed: () => _sheet(), icon: const Icon(Icons.add), label: Text(s.addRouter)),
     );
   }
 }

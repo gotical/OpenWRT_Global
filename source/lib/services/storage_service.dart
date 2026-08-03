@@ -276,4 +276,14 @@ class StorageService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('active_ai_provider', provider);
   }
+
+  static Future<String?> loadLocale() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('app_locale');
+  }
+
+  static Future<void> saveLocale(String languageCode) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('app_locale', languageCode);
+  }
 }

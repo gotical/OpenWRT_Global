@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../l10n/app_strings.dart';
 import '../models/router_connection.dart';
 import '../services/openwrt_service.dart';
 import '../services/storage_service.dart';
@@ -39,15 +40,18 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   DateTime _lastActivity = DateTime.now();
   Timer? _autoLockTimer;
 
-  final destinations = const [
-    NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard), label: 'Обзор'),
-    NavigationDestination(icon: Icon(Icons.network_check_outlined), selectedIcon: Icon(Icons.network_check), label: 'Сеть'),
-    NavigationDestination(icon: Icon(Icons.wifi_outlined), selectedIcon: Icon(Icons.wifi), label: 'Wi-Fi'),
-    NavigationDestination(icon: Icon(Icons.vpn_key_outlined), selectedIcon: Icon(Icons.vpn_key), label: 'VPN'),
-    NavigationDestination(icon: Icon(Icons.devices_outlined), selectedIcon: Icon(Icons.devices), label: 'Клиенты'),
-    NavigationDestination(icon: Icon(Icons.inventory_2_outlined), selectedIcon: Icon(Icons.inventory_2), label: 'Пакеты'),
-    NavigationDestination(icon: Icon(Icons.settings_outlined), selectedIcon: Icon(Icons.settings), label: 'Система'),
-  ];
+  List<NavigationDestination> get destinations {
+    final s = AppStrings.of(context);
+    return [
+      NavigationDestination(icon: const Icon(Icons.dashboard_outlined), selectedIcon: const Icon(Icons.dashboard), label: s.overview),
+      NavigationDestination(icon: const Icon(Icons.network_check_outlined), selectedIcon: const Icon(Icons.network_check), label: s.network),
+      NavigationDestination(icon: const Icon(Icons.wifi_outlined), selectedIcon: const Icon(Icons.wifi), label: s.wifi),
+      NavigationDestination(icon: const Icon(Icons.vpn_key_outlined), selectedIcon: const Icon(Icons.vpn_key), label: s.vpn),
+      NavigationDestination(icon: const Icon(Icons.devices_outlined), selectedIcon: const Icon(Icons.devices), label: s.clients),
+      NavigationDestination(icon: const Icon(Icons.inventory_2_outlined), selectedIcon: const Icon(Icons.inventory_2), label: s.packages),
+      NavigationDestination(icon: const Icon(Icons.settings_outlined), selectedIcon: const Icon(Icons.settings), label: s.system),
+    ];
+  }
 
   @override
   void initState() {
@@ -638,7 +642,7 @@ ListTile(
               const Spacer(),
               const Padding(
                 padding: EdgeInsets.all(16),
-                child: Text('OPENWRT - Global v4.0.1\nРыбинскLAB', style: TextStyle(color: Colors.grey), textAlign: TextAlign.center),
+                 child: Text('OPENWRT - Global v4.0.2\nРыбинскLAB', style: TextStyle(color: Colors.grey), textAlign: TextAlign.center),
               ),
             ],
           ),

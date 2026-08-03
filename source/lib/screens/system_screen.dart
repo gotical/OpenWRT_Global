@@ -496,7 +496,7 @@ class _SystemScreenState extends State<SystemScreen> {
             if (pwdCtrl.text.isEmpty) return;
             final routers = await StorageService.loadRouters();
             final data = routers.map((r) => r.toJson()).toList();
-            final encrypted = BackupService.exportToJson({'routers': data, 'version': '4.0.1'}, pwdCtrl.text);
+            final encrypted = BackupService.exportToJson({'routers': data, 'version': '4.0.2'}, pwdCtrl.text);
             await showDialog(
               context: ctx,
               builder: (ctx) => AlertDialog(
