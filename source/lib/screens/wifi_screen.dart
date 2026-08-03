@@ -801,7 +801,7 @@ class _WifiScreenState extends State<WifiScreen> {
                                     ),
                                     const SizedBox(width: 8),
                                     Expanded(
-                                      child: FilledButton.tonalIcon(
+                                      child: OutlinedButton.icon(
                                         onPressed: () => Navigator.of(context).push(
                                           MaterialPageRoute(
                                             builder: (_) => ChannelAnalyzerScreen(
@@ -811,7 +811,7 @@ class _WifiScreenState extends State<WifiScreen> {
                                           ),
                                         ),
                                         icon: const Icon(Icons.analytics, size: 18),
-                                        label: Text(s.text('Анализатор каналов'), style: const TextStyle(fontSize: 13)),
+                                        label: Text(s.text('Анализатор'), style: const TextStyle(fontSize: 13)),
                                       ),
                                     ),
                                   ],

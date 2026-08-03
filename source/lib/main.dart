@@ -8,10 +8,14 @@ import 'services/di_container.dart';
 import 'services/secure_screen.dart';
 import 'services/storage_service.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   setupDi();
-  SecureScreen.enable();
+  if (await StorageService.loadSecureScreen()) {
+    SecureScreen.enable();
+  } else {
+    SecureScreen.disable();
+  }
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
     systemNavigationBarColor: Colors.transparent,

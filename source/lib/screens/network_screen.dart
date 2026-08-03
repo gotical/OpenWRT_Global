@@ -59,52 +59,107 @@ class _NetworkScreenState extends State<NetworkScreen> {
   }
 
   Future<void> _setupWan() async {
-    String? provider;
+    // Шаг 1: выбор страны.
+    String? country;
     await showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-         title: Text(_t('Выберите провайдера')),
+        title: Text(_t('Выберите страну')),
         content: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            ...OpenWrtService.russianProviders.entries.map((e) => ListTile(
+            for (final e in OpenWrtService.countryNames.entries)
+              ListTile(
+                leading: const Icon(Icons.public),
+                title: Text(e.value),
+                subtitle: Text(_t('Быстрая настройка проводного интернета')),
+                onTap: () { country = e.key; Navigator.pop(ctx); },
+              ),
+          ]),
+        ),
+      ),
+    );
+    if (country == null || !mounted) return;
+
+    // Шаг 2: выбор провайдера страны.
+    final providers = OpenWrtService.countryProviders[country]!;
+    Map<String, String>? provider;
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(_t('Выберите провайдера')),
+        content: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            ...providers.entries.map((e) => ListTile(
               leading: const Icon(Icons.business),
               title: Text(e.value['name']!),
               subtitle: Text(e.value['desc']!),
               trailing: Text(e.value['proto']!.toUpperCase(), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-              onTap: () { provider = e.key; Navigator.pop(ctx); },
+              onTap: () { provider = e.value; Navigator.pop(ctx); },
             )),
           ]),
         ),
       ),
     );
-    if (provider == null) return;
+    if (provider == null || !mounted) return;
+    final prov = provider!;
 
-    final proto = OpenWrtService.russianProviders[provider!]!['proto']!;
+    final proto = prov['proto']!;
     if (proto == 'pppoe') {
       final user = TextEditingController();
       final pass = TextEditingController();
       final ok = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-           title: Text(_t('PPPoE — логин и пароль')),
+          title: Text(_t('PPPoE — логин и пароль')),
           content: Column(mainAxisSize: MainAxisSize.min, children: [
-             TextField(controller: user, decoration: InputDecoration(labelText: _t('Логин'))),
+            TextField(controller: user, decoration: InputDecoration(labelText: _t('Логин'))),
             const SizedBox(height: 8),
-             TextField(controller: pass, decoration: InputDecoration(labelText: _t('Пароль')), obscureText: true),
+            TextField(controller: pass, decoration: InputDecoration(labelText: _t('Пароль')), obscureText: true),
           ]),
           actions: [
-             TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(_t('Отмена'))),
-             FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(_t('Применить'))),
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(_t('Отмена'))),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(_t('Применить'))),
           ],
         ),
       );
       if (ok == true) {
-        await widget.service.configureWan(provider!, username: user.text, password: pass.text);
-         if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_t('WAN настроен, сеть перезапускается...'))));
+        await widget.service.configureWan(prov, username: user.text, password: pass.text);
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_t('WAN настроен, сеть перезапускается...'))));
+      }
+    } else if (proto == 'static') {
+      final ipCtrl = TextEditingController();
+      final maskCtrl = TextEditingController(text: '255.255.255.0');
+      final gwCtrl = TextEditingController();
+      final dnsCtrl = TextEditingController();
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(_t('Статический IP')),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              TextField(controller: ipCtrl, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: _t('IP-адрес'))),
+              const SizedBox(height: 8),
+              TextField(controller: maskCtrl, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: _t('Маска'))),
+              const SizedBox(height: 8),
+              TextField(controller: gwCtrl, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: _t('Шлюз'))),
+              const SizedBox(height: 8),
+              TextField(controller: dnsCtrl, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: _t('DNS'))),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(_t('Отмена'))),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(_t('Применить'))),
+          ],
+        ),
+      );
+      if (ok == true) {
+        await widget.service.configureWan(prov,
+            ip: ipCtrl.text.trim(), netmask: maskCtrl.text.trim(), gateway: gwCtrl.text.trim(), dns: dnsCtrl.text.trim());
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_t('WAN настроен (Static), сеть перезапускается...'))));
       }
     } else {
-      await widget.service.configureWan(provider!);
-       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_t('WAN настроен (DHCP) — сеть перезапускается'))));
+      await widget.service.configureWan(prov);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_t('WAN настроен (DHCP) — сеть перезапускается'))));
     }
   }
 

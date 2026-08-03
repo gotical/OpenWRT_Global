@@ -19,6 +19,9 @@ class StorageService {
 
   static String _pwKey(String host, String user) => 'router_pw_${host}_$user';
   static String _keyKey(String host, String user) => 'router_key_${host}_$user';
+  // Ключи старых версий приложения, где секреты разделялись только по хосту.
+  static String _legacyPwKey(String host) => 'router_pw_$host';
+  static String _legacyKeyKey(String host) => 'router_key_$host';
 
   // ---- Секреты в Keystore ----
 
@@ -74,6 +77,26 @@ class StorageService {
     try {
       pw = await _secure.read(key: _pwKey(r.host, r.username)) ?? '';
       key = await _secure.read(key: _keyKey(r.host, r.username));
+      // Однократно мигрируем секреты, сохранённые до добавления username в ключ.
+      if (pw.isEmpty) {
+        pw = await _secure.read(key: _legacyPwKey(r.host)) ?? '';
+      }
+      if (key == null || key.isEmpty) {
+        key = await _secure.read(key: _legacyKeyKey(r.host));
+      }
+      if (pw.isNotEmpty || (key != null && key.isNotEmpty)) {
+        await _saveSecrets(RouterConnection(
+          name: r.name,
+          host: r.host,
+          port: r.port,
+          username: r.username,
+          password: pw,
+          sshKey: key,
+          useKey: r.useKey,
+          useHttps: r.useHttps,
+          fingerprint: r.fingerprint,
+        ));
+      }
     } catch (_) {}
     return RouterConnection(
       name: r.name,
@@ -285,5 +308,17 @@ class StorageService {
   static Future<void> saveLocale(String languageCode) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('app_locale', languageCode);
+  }
+
+  // Защита экрана (FLAG_SECURE): запрещает скриншоты по умолчанию.
+  // Пользователь может отключить её в настройках.
+  static Future<bool> loadSecureScreen() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('secure_screen') ?? true;
+  }
+
+  static Future<void> saveSecureScreen(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('secure_screen', enabled);
   }
 }

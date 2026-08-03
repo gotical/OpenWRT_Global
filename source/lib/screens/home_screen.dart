@@ -162,11 +162,16 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   Future<void> _biometricUnlock() async {
     final ok = await BiometricAuthService.authenticate();
-    if (ok && mounted) {
+    if (!mounted) return;
+    if (ok) {
       setState(() {
         _locked = false;
         _lastActivity = DateTime.now();
       });
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(AppStrings.of(context).text('Не удалось разблокировать: попробуйте ещё раз')),
+      ));
     }
   }
 
@@ -645,7 +650,7 @@ ListTile(
               const Spacer(),
               const Padding(
                 padding: EdgeInsets.all(16),
-                  child: Text('OPENWRT - Global v4.0.3\nРыбинскLAB', style: TextStyle(color: Colors.grey), textAlign: TextAlign.center),
+                  child: Text('OPENWRT - Global v4.0.6\nРыбинскLAB', style: TextStyle(color: Colors.grey), textAlign: TextAlign.center),
               ),
             ],
           ),

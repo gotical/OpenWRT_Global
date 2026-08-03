@@ -376,29 +376,11 @@ class _FirewallScreenState extends State<FirewallScreen> {
                           const SizedBox(height: 12),
                           Row(
                             children: [
-                              Expanded(
-                                child: OutlinedButton.icon(
-                                  onPressed: processing.containsKey('fw:restart') ? null : () => _action('fw', 'restart'),
-                                  icon: const Icon(Icons.refresh, size: 18),
-                                   label: Text(_t('Перезагрузить')),
-                                ),
-                              ),
+                              _fwActionButton('restart', Icons.refresh, _t('Перезагрузить')),
                               const SizedBox(width: 8),
-                              Expanded(
-                                child: FilledButton.tonalIcon(
-                                  onPressed: processing.containsKey('fw:start') ? null : () => _action('fw', 'start'),
-                                  icon: const Icon(Icons.play_arrow, size: 18),
-                                   label: Text(_t('Старт')),
-                                ),
-                              ),
+                              _fwActionButton('start', Icons.play_arrow, _t('Старт')),
                               const SizedBox(width: 8),
-                              Expanded(
-                                child: FilledButton.tonalIcon(
-                                  onPressed: processing.containsKey('fw:stop') ? null : () => _action('fw', 'stop'),
-                                  icon: const Icon(Icons.stop, size: 18),
-                                   label: Text(_t('Стоп')),
-                                ),
-                              ),
+                              _fwActionButton('stop', Icons.stop, _t('Стоп')),
                             ],
                           ),
                         ],
@@ -527,6 +509,26 @@ class _FirewallScreenState extends State<FirewallScreen> {
               const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
             ],
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _fwActionButton(String action, IconData icon, String label) {
+    final disabled = processing.containsKey('fw:$action');
+    const shape = RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(14)));
+    final style = ButtonStyle(
+      padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: 8)),
+      shape: WidgetStatePropertyAll(shape),
+    );
+    return Expanded(
+      child: SizedBox(
+        height: 44,
+        child: FilledButton.tonalIcon(
+          style: style,
+          onPressed: disabled ? null : () => _action('fw', action),
+          icon: Icon(icon, size: 18),
+          label: Text(label),
         ),
       ),
     );

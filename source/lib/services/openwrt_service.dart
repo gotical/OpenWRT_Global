@@ -37,6 +37,15 @@ class OpenWrtService {
 
   OpenWrtService(this.config);
 
+  String _readableError(Object error) {
+    return error
+        .toString()
+        .replaceAll(config.password, '***')
+        .replaceAll(RegExp(r'[\u0000-\u001F\u007F]'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+  }
+
   bool get isConnected => _connected;
 
   SSHClient? get sshClient => _client;
@@ -106,7 +115,7 @@ class OpenWrtService {
       } catch (e) {
         _connected = false;
         AppLogger.e('SSH connect failed to ${config.host}', e);
-        throw Exception('Ошибка подключения SSH: ${e.toString().replaceAll(config.password, '***')}');
+        throw Exception('Ошибка подключения SSH: ${_readableError(e)}');
       }
     }();
     _connecting = f;
@@ -189,7 +198,7 @@ class OpenWrtService {
         _connected = true;
         return utf8.decode(result);
       } catch (e2) {
-        throw Exception('SSH ошибка: ${e2.toString().replaceAll(config.password, '***')}');
+        throw Exception('SSH ошибка: ${_readableError(e2)}');
       }
     }
   }
@@ -1185,27 +1194,77 @@ uci commit firewall
     return 'Роутер перезагружается...';
   }
 
-  static const russianProviders = {
-    'beeline': {'name': 'Билайн', 'proto': 'dhcp', 'desc': 'DHCP — автоматически'},
-    'rostelecom': {'name': 'Ростелеком', 'proto': 'pppoe', 'desc': 'PPPoE — логин и пароль из договора'},
-    'ttk': {'name': 'ТТК', 'proto': 'pppoe', 'desc': 'PPPoE — логин@ttk, пароль из договора'},
-    'mgts': {'name': 'МГТС', 'proto': 'pppoe', 'desc': 'PPPoE — номер договора, пароль'},
-    'domru': {'name': 'Дом.ру', 'proto': 'dhcp', 'desc': 'DHCP — автоматически'},
-    'yota': {'name': 'Yota', 'proto': 'dhcp', 'desc': 'DHCP — автоматически'},
-    'atel': {'name': 'Атель', 'proto': 'pppoe', 'desc': 'PPPoE — логин и пароль'},
-    'mts': {'name': 'МТС', 'proto': 'dhcp', 'desc': 'DHCP или PPPoE по необходимости'},
+  /// Быстрая настройка WAN по провайдерам.
+  /// Ключ страны → провайдер → {name, proto, desc}.
+  /// proto: dhcp | pppoe | static.
+  static const countryProviders = {
+    'ru': {
+      'beeline': {'name': 'Билайн', 'proto': 'dhcp', 'desc': 'DHCP — автоматически'},
+      'rostelecom': {'name': 'Ростелеком', 'proto': 'pppoe', 'desc': 'PPPoE — логин и пароль из договора'},
+      'ttk': {'name': 'ТТК', 'proto': 'pppoe', 'desc': 'PPPoE — логин@ttk, пароль из договора'},
+      'mgts': {'name': 'МГТС', 'proto': 'pppoe', 'desc': 'PPPoE — номер договора, пароль'},
+      'domru': {'name': 'Дом.ру (ЭР-Телеком)', 'proto': 'dhcp', 'desc': 'DHCP — автоматически'},
+      'yota': {'name': 'Yota', 'proto': 'dhcp', 'desc': 'DHCP — автоматически'},
+      'atel': {'name': 'Атель', 'proto': 'pppoe', 'desc': 'PPPoE — логин и пароль'},
+      'mts': {'name': 'МТС', 'proto': 'pppoe', 'desc': 'PPPoE — логин и пароль из договора'},
+      'megafon': {'name': 'МегаФон', 'proto': 'pppoe', 'desc': 'PPPoE — логин и пароль из договора'},
+      'akado': {'name': 'Акадо', 'proto': 'dhcp', 'desc': 'DHCP — автоматически'},
+      'enforta': {'name': 'Энфорта', 'proto': 'dhcp', 'desc': 'DHCP — автоматически'},
+      'generic_pppoe': {'name': 'Общий PPPoE', 'proto': 'pppoe', 'desc': 'PPPoE — логин и пароль'},
+      'generic_static': {'name': 'Статический IP', 'proto': 'static', 'desc': 'IP, маска, шлюз, DNS из договора'},
+    },
+    'by': {
+      'beltelecom': {'name': 'Белтелеком (ByFly)', 'proto': 'pppoe', 'desc': 'PPPoE — логин и пароль из договора'},
+      'beltelecom_gpon': {'name': 'Белтелеком GPON', 'proto': 'dhcp', 'desc': 'DHCP — автоматически'},
+      'a1': {'name': 'А1 (A1 Беларусь)', 'proto': 'pppoe', 'desc': 'PPPoE — логин и пароль'},
+      'mts_by': {'name': 'МТС Беларусь', 'proto': 'pppoe', 'desc': 'PPPoE — логин и пароль из договора'},
+      'generic_pppoe': {'name': 'Общий PPPoE', 'proto': 'pppoe', 'desc': 'PPPoE — логин и пароль'},
+      'generic_static': {'name': 'Статический IP', 'proto': 'static', 'desc': 'IP, маска, шлюз, DNS из договора'},
+    },
+    'kz': {
+      'megaline': {'name': 'Казахтелеком (Megaline)', 'proto': 'pppoe', 'desc': 'PPPoE — логин и пароль из договора'},
+      'beeline_kz': {'name': 'Beeline (KaR-Tel)', 'proto': 'pppoe', 'desc': 'PPPoE — логин и пароль из договора'},
+      'kz_dhcp': {'name': 'Казахтелеком GPON', 'proto': 'dhcp', 'desc': 'DHCP — автоматически'},
+      'generic_pppoe': {'name': 'Общий PPPoE', 'proto': 'pppoe', 'desc': 'PPPoE — логин и пароль'},
+      'generic_static': {'name': 'Статический IP', 'proto': 'static', 'desc': 'IP, маска, шлюз, DNS из договора'},
+    },
+    'ua': {
+      'ukrtelecom': {'name': 'Укртелеком', 'proto': 'pppoe', 'desc': 'PPPoE — логин и пароль из договора'},
+      'kyivstar': {'name': 'Киевстар (Домашний интернет)', 'proto': 'pppoe', 'desc': 'PPPoE — логин и пароль'},
+      'vodafone': {'name': 'Vodafone Украина', 'proto': 'pppoe', 'desc': 'PPPoE — логин и пароль'},
+      'triolan': {'name': 'Триолан', 'proto': 'dhcp', 'desc': 'DHCP — автоматически'},
+      'volia': {'name': 'Воля', 'proto': 'dhcp', 'desc': 'DHCP — автоматически'},
+      'lanet': {'name': 'Lanet', 'proto': 'dhcp', 'desc': 'DHCP — автоматически'},
+      'generic_pppoe': {'name': 'Общий PPPoE', 'proto': 'pppoe', 'desc': 'PPPoE — логин и пароль'},
+      'generic_static': {'name': 'Статический IP', 'proto': 'static', 'desc': 'IP, маска, шлюз, DNS из договора'},
+    },
   };
 
-  Future<void> configureWan(String providerKey, {String? username, String? password}) async {
-    final p = russianProviders[providerKey];
-    if (p == null) throw Exception('Провайдер не найден');
-    final proto = p['proto']!;
+  /// Названия стран для выбора (код → имя).
+  static const countryNames = {
+    'ru': 'Россия',
+    'by': 'Беларусь',
+    'kz': 'Казахстан',
+    'ua': 'Украина',
+  };
+
+  Future<void> configureWan(Map<String, String> provider,
+      {String? username, String? password, String? ip, String? netmask, String? gateway, String? dns}) async {
+    final proto = provider['proto'];
+    if (proto == null) throw Exception('Провайдер не найден');
+    final esc = (String s) => s.replaceAll("'", "'\\''");
 
     if (proto == 'dhcp') {
       await runCommand('''
 uci set network.wan=interface
 uci set network.wan.proto='dhcp'
 uci set network.wan.device='br-wan' 2>/dev/null || uci set network.wan.device='eth1'
+uci delete network.wan.username 2>/dev/null
+uci delete network.wan.password 2>/dev/null
+uci delete network.wan.ipaddr 2>/dev/null
+uci delete network.wan.netmask 2>/dev/null
+uci delete network.wan.gateway 2>/dev/null
+uci delete network.wan.dns 2>/dev/null
 uci commit network
 /etc/init.d/network reload
 ''');
@@ -1214,13 +1273,33 @@ uci commit network
 uci set network.wan=interface
 uci set network.wan.proto='pppoe'
 uci set network.wan.device='br-wan' 2>/dev/null || uci set network.wan.device='eth1'
-uci set network.wan.username='${username.replaceAll("'", "'\\''")}'
-uci set network.wan.password='${password.replaceAll("'", "'\\''")}'
+uci set network.wan.username='${esc(username)}'
+uci set network.wan.password='${esc(password)}'
+uci delete network.wan.ipaddr 2>/dev/null
+uci delete network.wan.netmask 2>/dev/null
+uci delete network.wan.gateway 2>/dev/null
+uci delete network.wan.dns 2>/dev/null
 uci commit network
 /etc/init.d/network reload
 """);
-    } else {
+    } else if (proto == 'static' && ip != null && ip.isNotEmpty) {
+      await runCommand("""
+uci set network.wan=interface
+uci set network.wan.proto='static'
+uci set network.wan.device='br-wan' 2>/dev/null || uci set network.wan.device='eth1'
+uci set network.wan.ipaddr='${esc(ip)}'
+uci set network.wan.netmask='${esc(netmask ?? '255.255.255.0')}'
+uci set network.wan.gateway='${esc(gateway ?? '')}'
+uci set network.wan.dns='${esc(dns ?? '')}'
+uci delete network.wan.username 2>/dev/null
+uci delete network.wan.password 2>/dev/null
+uci commit network
+/etc/init.d/network reload
+""");
+    } else if (proto == 'pppoe') {
       throw Exception('PPPoE требует логин и пароль');
+    } else if (proto == 'static') {
+      throw Exception('Статический IP требует IP-адрес');
     }
   }
 

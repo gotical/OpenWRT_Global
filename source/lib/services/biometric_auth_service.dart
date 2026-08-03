@@ -6,7 +6,9 @@ class BiometricAuthService {
 
   static Future<bool> isAvailable() async {
     try {
-      return await _auth.canCheckBiometrics || await _auth.isDeviceSupported();
+      final biometrics = await _auth.canCheckBiometrics;
+      final supported = await _auth.isDeviceSupported();
+      return biometrics || supported;
     } catch (_) {
       return false;
     }
@@ -16,9 +18,18 @@ class BiometricAuthService {
     try {
       return await _auth.authenticate(
         localizedReason: reason,
-        biometricOnly: true,
+        // biometricOnly=false: кроме отпечатка допускаем откат на PIN/пароль
+        // устройства, чтобы приложение нельзя было заблокировать навсегда.
+        // persistAcrossBackgrounding=true: запрос повторяется при возврате
+        // в приложение, если авторизация прервалась.
+        biometricOnly: false,
+        persistAcrossBackgrounding: true,
       );
+    } on LocalAuthException {
+      return false;
     } on PlatformException {
+      return false;
+    } catch (_) {
       return false;
     }
   }

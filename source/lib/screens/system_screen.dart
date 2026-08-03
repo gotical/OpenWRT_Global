@@ -8,6 +8,7 @@ import '../services/storage_service.dart';
 import '../services/backup_service.dart';
 import '../services/notification_service.dart';
 import '../services/device_security.dart';
+import '../services/secure_screen.dart';
 import '../services/ai_analysis_service.dart';
 import 'about_screen.dart';
 import 'login_screen.dart';
@@ -499,7 +500,7 @@ class _SystemScreenState extends State<SystemScreen> {
             if (pwdCtrl.text.isEmpty) return;
             final routers = await StorageService.loadRouters();
             final data = routers.map((r) => r.toJson()).toList();
-            final encrypted = BackupService.exportToJson({'routers': data, 'version': '4.0.3'}, pwdCtrl.text);
+            final encrypted = BackupService.exportToJson({'routers': data, 'version': '4.0.6'}, pwdCtrl.text);
             await showDialog(
               context: ctx,
               builder: (ctx) => AlertDialog(
@@ -592,6 +593,47 @@ class _SystemScreenState extends State<SystemScreen> {
           _secRow('HTTP Proxy', proxy),
         ]),
          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: Text(_t('Закрыть')))],
+      ),
+    );
+  }
+
+  Future<void> _showScreenshotSecurity() async {
+    var enabled = await StorageService.loadSecureScreen();
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSt) => AlertDialog(
+          title: Row(children: [
+            const Icon(Icons.screenshot_monitor),
+            const SizedBox(width: 8),
+            Text(_t('Защита экрана')),
+          ]),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(_t('Выключите защиту, чтобы можно было делать скриншоты.')),
+              const SizedBox(height: 8),
+              SwitchListTile(
+                title: Text(enabled ? _t('Защита включена') : _t('Защита выключена')),
+                subtitle: Text(enabled ? _t('Скриншоты запрещены') : _t('Скриншоты разрешены')),
+                value: enabled,
+                onChanged: (v) async {
+                  setSt(() => enabled = v);
+                  await StorageService.saveSecureScreen(v);
+                  if (v) {
+                    await SecureScreen.enable();
+                  } else {
+                    await SecureScreen.disable();
+                  }
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: Text(_t('Закрыть'))),
+          ],
+        ),
       ),
     );
   }
@@ -1295,6 +1337,8 @@ class _SystemScreenState extends State<SystemScreen> {
                     _ActionCard(icon: Icons.notifications, title: s.text('Уведомления'), subtitle: s.text('мониторинг роутера'), onTap: _setupNotifications),
                     const SizedBox(height: 12),
                     _ActionCard(icon: Icons.security, title: s.text('Безопасность устройства'), subtitle: s.text('Root/эмулятор/отладка'), onTap: _showSecurityStatus),
+                    const SizedBox(height: 12),
+                    _ActionCard(icon: Icons.screenshot_monitor, title: s.text('Защита экрана'), subtitle: s.text('Разрешить скриншоты'), onTap: _showScreenshotSecurity),
                     const SizedBox(height: 12),
                      _ActionCard(icon: Icons.smart_toy, title: s.text('AI-ассистент'), subtitle: 'OpenRouter / DeepSeek', onTap: _setupAiKey),
                     const SizedBox(height: 12),
