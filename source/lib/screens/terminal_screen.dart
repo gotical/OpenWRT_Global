@@ -28,6 +28,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
   bool _connected = false;
   bool _ctrl = false;
   bool _shift = false;
+  bool _started = false;
   SSHSession? _session;
 
   static const _letters = [
@@ -38,9 +39,16 @@ class _TerminalScreenState extends State<TerminalScreen> {
   @override
   void initState() {
     super.initState();
+    _term = AnsiTerminalController(cols: 80);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_started) return;
+    _started = true;
     final width = MediaQuery.of(context).size.width;
-    final cols = (width / 7.8).floor().clamp(40, 160);
-    _term = AnsiTerminalController(cols: cols);
+    _term!.emulator.cols = (width / 7.8).floor().clamp(40, 160);
     _connectShell();
   }
 

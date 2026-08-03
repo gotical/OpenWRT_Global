@@ -160,6 +160,26 @@ class AboutScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 24),
                 Card(
+                  color: theme.colorScheme.errorContainer.withValues(alpha: 0.45),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.warning_amber, color: theme.colorScheme.error),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            strings.text('Важно: из-за изменений шифрования и защиты настроек SSH, после обновления до этой версии возможно потребуется удалить и заново добавить роутер в приложении.'),
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Card(
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(

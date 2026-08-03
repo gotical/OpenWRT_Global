@@ -50,7 +50,7 @@ class TermLine {
 /// Простой VT100-эмулятор: обрабатывает ANSI-последовательности и
 /// хранит буфер строк с цветами (SGR 0-256, курсор, очистка).
 class AnsiEmulator {
-  final int cols;
+  int cols;
   final int maxLines;
   final List<TermLine> lines = [TermLine()];
   int row = 0;
