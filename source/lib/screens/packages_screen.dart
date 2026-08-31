@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../l10n/app_strings.dart';
 import '../models/package_info.dart';
 import '../services/openwrt_service.dart';
+import '../widgets/app_skeleton.dart';
 
 class PackagesScreen extends StatefulWidget {
   final OpenWrtService service;
@@ -178,7 +179,14 @@ class _PackagesScreenState extends State<PackagesScreen> {
             ),
           ],
           body: loading && _tabIndex == 0
-              ? const Center(child: CircularProgressIndicator())
+              ? ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: const [
+                    AppCardSkeleton(),
+                    AppCardSkeleton(),
+                    AppCardSkeleton(),
+                  ],
+                )
               : TabBarView(
                   children: [
                     _buildInstalledList(theme),
