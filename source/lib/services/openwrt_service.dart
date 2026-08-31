@@ -2376,6 +2376,32 @@ echo "$stopM $stopH * * * nft delete element inet fw4 blocklist { $cleanMac } 2>
     return {'private': privKey, 'public': pubKey};
   }
 
+  /// Синхронизировать время роутера с временем ТЕЛЕФОНА, если расхождение
+  /// заметное. Работает через set_time_on_router (date -u -s), в UTC.
+  Future<String?> syncTimeFromPhone() async {
+    final now = DateTime.now().toUtc();
+    String _2(int n) => n.toString().padLeft(2, '0');
+    final phoneUtc =
+        '${now.year}-${_2(now.month)}-${_2(now.day)} ${_2(now.hour)}:${_2(now.minute)}:${_2(now.second)}';
+    try {
+      final raw = await runCommand('date "+%Y-%m-%d %H:%M:%S" 2>/dev/null');
+      final routerStr = raw.trim().isEmpty ? null : raw.trim();
+      if (routerStr != null) {
+        final routerT = DateTime.tryParse(routerStr.replaceAll(' ', 'T'));
+        if (routerT != null) {
+          final diff = now.difference(routerT.toUtc()).abs().inSeconds;
+          if (diff <= 60) return null; // время уже близко к телефону
+        }
+      }
+      // Ставим время телефона (UTC) на роутер.
+      final out = await runCommand("date -u -s '$phoneUtc' 2>&1 && echo OK || echo FAIL");
+      if (out.contains('FAIL')) return null;
+      return 'Время роутера синхронизировано с телефоном';
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<String> syncTime() async {
     // Пробуем несколько методов синхронизации времени
     try {

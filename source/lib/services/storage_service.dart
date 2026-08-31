@@ -324,6 +324,17 @@ class StorageService {
     await prefs.setString('theme_mode', mode);
   }
 
+  // Авто-синхронизация времени роутера с телефоном при входе (по умолчанию вкл).
+  static Future<bool> loadTimeSyncEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('time_sync_enabled') ?? true;
+  }
+
+  static Future<void> saveTimeSyncEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('time_sync_enabled', enabled);
+  }
+
   // Защита экрана (FLAG_SECURE): запрещает скриншоты по умолчанию.
   // Пользователь может отключить её в настройках.
   static Future<bool> loadSecureScreen() async {

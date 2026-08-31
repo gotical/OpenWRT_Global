@@ -35,6 +35,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   int index = 0;
   bool _checkedDeps = false;
   bool _hideNonFunctional = false;
+  bool _timeSyncEnabled = true;
 
   List<NavigationDestination> get destinations {
     final s = AppStrings.of(context);
@@ -60,8 +61,31 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     StorageService.isHideNonFunctionalSections().then((v) {
       if (mounted) setState(() => _hideNonFunctional = v);
     });
+    StorageService.loadTimeSyncEnabled().then((v) {
+      if (mounted) setState(() => _timeSyncEnabled = v);
+    });
     ClientMonitor.instance.onClientConnected = _onClientConnected;
     ClientMonitor.instance.start(service);
+    _autoSyncTime();
+  }
+
+  /// Авто-синхронизация времени роутера с телефоном при входе
+  /// (включается/выключается в настройках).
+  Future<void> _autoSyncTime() async {
+    try {
+      if (!await StorageService.loadTimeSyncEnabled()) return;
+      if (!service.isConnected) await service.connect();
+      final res = await service.syncTimeFromPhone();
+      if (mounted && res != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(res),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      await service.disconnect();
+    } catch (_) {}
   }
 
   Future<bool> _verifyHostKey(String fingerprint) async {
@@ -598,6 +622,16 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                               },
                                title: Text(AppStrings.of(ctx).text('Уведомления о подключениях')),
                                subtitle: Text(AppStrings.of(ctx).text('Оповещать, когда к Wi-Fi подключается новое устройство (пока приложение открыто)')),
+                            ),
+                            // Синхронизация времени роутера с телефоном.
+                            SwitchListTile(
+                              value: _timeSyncEnabled,
+                              onChanged: (v) async {
+                                setSt(() => _timeSyncEnabled = v);
+                                await StorageService.saveTimeSyncEnabled(v);
+                              },
+                              title: Text(AppStrings.of(ctx).text('Синхронизация времени с телефона')),
+                              subtitle: Text(AppStrings.of(ctx).text('При входе ставить время роутера = времени телефона, если расхождение')),
                             ),
                             ListTile(
                               leading: const Icon(Icons.history),
