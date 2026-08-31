@@ -95,6 +95,7 @@ class StorageService {
           useKey: r.useKey,
           useHttps: r.useHttps,
           fingerprint: r.fingerprint,
+          host2: r.host2,
         ));
       }
     } catch (_) {}
@@ -108,6 +109,7 @@ class StorageService {
       useKey: r.useKey,
       useHttps: r.useHttps,
       fingerprint: r.fingerprint,
+      host2: r.host2,
     );
   }
 
@@ -130,6 +132,7 @@ class StorageService {
         'useKey': r.useKey,
         'useHttps': r.useHttps,
         'fingerprint': r.fingerprint,
+        if (r.host2 != null && r.host2!.isNotEmpty) 'host2': r.host2,
       };
 
   /// Удаляет секреты роутера из Keystore (при удалении/очистке).
@@ -310,6 +313,17 @@ class StorageService {
     await prefs.setString('app_locale', languageCode);
   }
 
+  // Тема оформления: 'system' | 'light' | 'dark' (по аналогии с luci-mobile / OpenWrtManager).
+  static Future<String> loadThemeMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('theme_mode') ?? 'system';
+  }
+
+  static Future<void> saveThemeMode(String mode) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('theme_mode', mode);
+  }
+
   // Защита экрана (FLAG_SECURE): запрещает скриншоты по умолчанию.
   // Пользователь может отключить её в настройках.
   static Future<bool> loadSecureScreen() async {
@@ -320,5 +334,29 @@ class StorageService {
   static Future<void> saveSecureScreen(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('secure_screen', enabled);
+  }
+
+  // ---- Терминал: история и избранные команды (идея из openwrt-router-control) ----
+
+  static Future<List<String>> loadTerminalHistory() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getStringList('terminal_history') ?? [];
+  }
+
+  static Future<void> saveTerminalHistory(List<String> history) async {
+    final prefs = await SharedPreferences.getInstance();
+    // Ограничиваем размер (хранить не больше 100 последних команд).
+    final trimmed = history.length > 100 ? history.sublist(history.length - 100) : history;
+    await prefs.setStringList('terminal_history', trimmed);
+  }
+
+  static Future<List<String>> loadTerminalFavorites() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getStringList('terminal_favorites') ?? [];
+  }
+
+  static Future<void> saveTerminalFavorites(List<String> favorites) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('terminal_favorites', favorites);
   }
 }

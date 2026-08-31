@@ -100,6 +100,33 @@ class ClientsScreenState extends State<ClientsScreen> {
     }
   }
 
+  /// Отключить Wi-Fi клиента (идея из OpenWrtManager: hostapd del_client).
+  Future<void> _kickClient(ClientInfo c) async {
+    final iface = c.accessPoint ?? c.interface;
+    if (iface == null || iface.isEmpty) {
+      _snack(_t('Интерфейс не определён'));
+      return;
+    }
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(_t('Отключить устройство?')),
+        content: Text('${_displayName(c)}\n${c.mac}'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(_t('Отмена'))),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(_t('Отключить'))),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await widget.service.kickWifiClient(iface, c.mac);
+      if (mounted) _snack(_t('Устройство отключено'));
+    } catch (e) {
+      if (mounted) _snack('$e');
+    }
+  }
+
   Future<void> _setLimit(ClientInfo client) async {
     final cur = limits[client.mac];
     final ctrl = TextEditingController(text: cur != null ? _gb(cur) : '');
@@ -572,6 +599,13 @@ class ClientsScreenState extends State<ClientsScreen> {
                      _btn(() => _setLimit(c), Icons.data_usage, _t('ГБ')),
                      _btn(() => _setSpeedLimit(c), Icons.speed, _t('КБ/с')),
                     _btn(() => _setStaticIp(c), Icons.router, 'IP'),
+                    if (c.isWifi)
+                      _btn(
+                        () => _kickClient(c),
+                        Icons.link_off,
+                        _t('Откл.'),
+                        Colors.orange,
+                      ),
                   ]),
                 ],
               ),

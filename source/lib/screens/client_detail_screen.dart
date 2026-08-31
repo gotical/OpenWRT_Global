@@ -15,6 +15,7 @@ class ClientDetailScreen extends StatefulWidget {
 class _ClientDetailScreenState extends State<ClientDetailScreen> {
   String _t(String source) => AppStrings.of(context).text(source);
   String deviceType = '', vendor = '', apInfo = '', connectionPath = '';
+  String? ttlOs;
   List<String> domains = [];
   bool loading = true;
 
@@ -33,6 +34,10 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
         await widget.service.connect();
         try { vendor = await widget.service.fetchMacVendor(c.mac); } catch (_) {}
         try { deviceType = await widget.service.classifyDevice(mac: c.mac, hostname: c.hostname, ip: c.ip); } catch (_) {}
+        // ОС по TTL ping (идея из Stryker) — мгновенно, без nmap.
+        if (c.ip != null && c.ip!.isNotEmpty) {
+          try { ttlOs = await widget.service.pingOsByTtl(c.ip!); } catch (_) {}
+        }
         // Активные соединения
         try {
           final raw = await widget.service.runCommand('conntrack -L 2>/dev/null | grep "${c.ip}" | head -20 || cat /proc/net/nf_conntrack 2>/dev/null | grep "${c.ip}" | head -20 || echo ""');
@@ -53,6 +58,7 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
            _r(_t('Имя'), c.hostname), _r('IP', c.ip ?? '—'), _r('MAC', c.mac),
            if (vendor.isNotEmpty) _r(_t('Производитель'), vendor),
            if (deviceType.isNotEmpty) _r(_t('Тип'), deviceType),
+           if (ttlOs != null) _r('OS (TTL)', ttlOs!),
         ]),
         const SizedBox(height: 12),
          _card(t, _t('Подключение'), [

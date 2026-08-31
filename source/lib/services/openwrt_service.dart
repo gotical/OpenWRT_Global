@@ -12,6 +12,7 @@ import '../models/vpn_info.dart';
 import '../models/channel_scan_result.dart';
 import '../models/openwrt_capabilities.dart';
 import 'app_logger.dart';
+import 'storage_service.dart';
 
 class OpenWrtService {
   final RouterConnection config;
@@ -27,6 +28,9 @@ class OpenWrtService {
 
   /// Кэшированные возможности OpenWrt (определяются при первом подключении).
   OpenWrtCapabilities? _capabilities;
+
+  /// Кэш счётчиков для расчёта скорости WAN: хост -> (rx_bytes, время, tx_bytes).
+  final Map<String, (int, DateTime, int)> _wanStats = {};
 
   static Map<String, bool> lastDepsStatus = {};
   SSHClient? _client;
@@ -67,56 +71,23 @@ class OpenWrtService {
     if (_connected && _client != null) return;
     if (_connecting != null) return _connecting!;
     final f = () async {
-      try {
-        final socket = await SSHSocket.connect(config.host, config.port)
-            .timeout(const Duration(seconds: 15));
-        // Проверка fingerprint хоста (MITM-защита).
-        // dartssh2 передаёт fingerprint как UTF-8 строку "SHA256:<base64>".
-        final verify = onVerifyHostKey;
-        final accepted = onFingerprintAccepted;
-        FutureOr<bool> Function(String type, Uint8List fpBytes)? onVerify;
-        if (verify != null) {
-          onVerify = (String type, Uint8List fpBytes) async {
-            final fp = utf8.decode(fpBytes);
-            // Если уже ожидаем конкретный fingerprint — сверяем строго.
-            if (config.fingerprint != null && config.fingerprint!.isNotEmpty) {
-              if (fp == config.fingerprint) return true;
-              return await verify(fp);
-            }
-            // Иначе спрашиваем пользователя.
-            final ok = await verify(fp);
-            if (ok && accepted != null) {
-              await accepted(fp);
-            }
-            return ok;
-          };
+      // Сначала основной адрес, затем запасной (идея из luci-mobile):
+      // удобно, когда вы не в домашней сети — DDNS/внешний IP/другой порт.
+      final hosts = <String>[config.host];
+      final alt = config.host2?.trim();
+      if (alt != null && alt.isNotEmpty && alt != config.host) hosts.add(alt);
+      Object? lastError;
+      for (final host in hosts) {
+        try {
+          await _establish(host);
+          return;
+        } catch (e) {
+          lastError = e;
         }
-        if (config.useKey && config.sshKey != null && config.sshKey!.isNotEmpty) {
-          final keyPairs = SSHKeyPair.fromPem(config.sshKey!);
-          _client = SSHClient(
-            socket,
-            username: config.username,
-            identities: keyPairs,
-            onPasswordRequest: () => null,
-            onVerifyHostKey: onVerify,
-          );
-        } else {
-          _client = SSHClient(
-            socket,
-            username: config.username,
-            onPasswordRequest: () => config.password,
-            onVerifyHostKey: onVerify,
-          );
-        }
-        await _client!.run('echo ok').timeout(const Duration(seconds: 15));
-        _startKeepAlive();
-        _connected = true;
-        AppLogger.i('SSH connected to ${config.host}:${config.port}');
-      } catch (e) {
-        _connected = false;
-        AppLogger.e('SSH connect failed to ${config.host}', e);
-        throw Exception('Ошибка подключения SSH: ${_readableError(e)}');
       }
+      _connected = false;
+      AppLogger.e('SSH connect failed to ${config.host}', lastError!);
+      throw Exception('Ошибка подключения SSH: ${_readableError(lastError)}');
     }();
     _connecting = f;
     try {
@@ -124,6 +95,59 @@ class OpenWrtService {
     } finally {
       _connecting = null;
     }
+  }
+
+  Future<void> _establish(String host) async {
+    _client = null;
+    _connected = false;
+    final socket = await SSHSocket.connect(host, config.port)
+        .timeout(const Duration(seconds: 15));
+    // Проверка fingerprint хоста (MITM-защита).
+    // dartssh2 передаёт fingerprint как UTF-8 строку "SHA256:<base64>".
+    final verify = onVerifyHostKey;
+    final accepted = onFingerprintAccepted;
+    FutureOr<bool> Function(String type, Uint8List fpBytes)? onVerify;
+    if (verify != null) {
+      onVerify = (String type, Uint8List fpBytes) async {
+        final fp = utf8.decode(fpBytes);
+        // Отпечаток, сохранённый для ЭТОГО хоста (основного или запасного) —
+        // сверяем сами, чтобы не переспрашивать пользователя.
+        final stored = await StorageService.loadFingerprint(host);
+        if (stored != null && stored.isNotEmpty) return stored == fp;
+        // Если ожидаем конкретный fingerprint из конфига — сверяем строго.
+        if (config.fingerprint != null && config.fingerprint!.isNotEmpty) {
+          if (fp == config.fingerprint) return true;
+        }
+        // Иначе спрашиваем пользователя.
+        final ok = await verify(fp);
+        if (ok) {
+          await StorageService.saveFingerprint(host, fp);
+          if (accepted != null) await accepted(fp);
+        }
+        return ok;
+      };
+    }
+    if (config.useKey && config.sshKey != null && config.sshKey!.isNotEmpty) {
+      final keyPairs = SSHKeyPair.fromPem(config.sshKey!);
+      _client = SSHClient(
+        socket,
+        username: config.username,
+        identities: keyPairs,
+        onPasswordRequest: () => null,
+        onVerifyHostKey: onVerify,
+      );
+    } else {
+      _client = SSHClient(
+        socket,
+        username: config.username,
+        onPasswordRequest: () => config.password,
+        onVerifyHostKey: onVerify,
+      );
+    }
+    await _client!.run('echo ok').timeout(const Duration(seconds: 15));
+    _startKeepAlive();
+    _connected = true;
+    AppLogger.i('SSH connected to $host:${config.port}');
   }
 
   void _startKeepAlive() {
@@ -1585,6 +1609,74 @@ echo "$stopM $stopH * * * nft delete element inet fw4 blocklist { $cleanMac } 2>
       return raw.trim().isNotEmpty ? raw.trim() : 'Неизвестно';
     } catch (_) {
       return mac;
+    }
+  }
+
+  /// Отключить Wi-Fi клиента (идея из OpenWrtManager):
+  /// hostapd ubus del_client или fallback через hostapd_cli disassociate.
+  Future<void> kickWifiClient(String iface, String mac) async {
+    final clean = mac.toLowerCase();
+    final out = await runCommand(
+      "(ubus call hostapd.$iface del_client '{\"addr\":\"$clean\",\"reason\":1,\"deauth\":true,\"ban_time\":3000}' 2>/dev/null || "
+      "hostapd_cli -i $iface disassociate $clean 2>/dev/null) && echo OK || echo FAIL");
+    if (!out.trim().endsWith('OK')) {
+      throw Exception('Не удалось отключить клиента (нужен hostapd с ubus или hostapd_cli)');
+    }
+  }
+
+  /// Текущие скорости интерфейса WAN (байт/с) по разности счётчиков
+  /// между опросами (идея из OpenWrtManager NetworkTraffic).
+  Future<({double rxRate, double txRate})> fetchWanThroughput() async {
+    final raw = await runCommand(
+      "i=\$(ip route 2>/dev/null | grep '^default' | head -n1 | awk '{print \$5}'); "
+      "[ -n \"\$i\" ] || i=br-wan; "
+      "echo \"RX:\$(cat /sys/class/net/\$i/statistics/rx_bytes 2>/dev/null || echo 0)\"; "
+      "echo \"TX:\$(cat /sys/class/net/\$i/statistics/tx_bytes 2>/dev/null || echo 0)\"");
+    int rx = 0, tx = 0;
+    final rxM = RegExp(r'RX:(\d+)').firstMatch(raw);
+    final txM = RegExp(r'TX:(\d+)').firstMatch(raw);
+    if (rxM != null) rx = int.tryParse(rxM.group(1)!) ?? 0;
+    if (txM != null) tx = int.tryParse(txM.group(1)!) ?? 0;
+
+    final now = DateTime.now();
+    final key = 'wan_${config.host}';
+    final prev = _wanStats[key];
+    double rxRate = 0, txRate = 0;
+    if (prev != null) {
+      final dt = now.difference(prev.$2).inMilliseconds / 1000.0;
+      if (dt > 0.05) {
+        rxRate = ((rx - prev.$1) / dt).clamp(0, double.infinity).toDouble();
+        txRate = ((tx - prev.$3) / dt).clamp(0, double.infinity).toDouble();
+      }
+    }
+    _wanStats[key] = (rx, now, tx);
+    return (rxRate: rxRate, txRate: txRate);
+  }
+  /// Определение ОС клиента по TTL ответа на ping (идея из Stryker).
+  /// Возвращает строку вида «Linux/Unix · ~2 хопа» или null, если не ответил.
+  Future<String?> pingOsByTtl(String ip) async {
+    if (ip.isEmpty || ip == '-' || ip == '0.0.0.0') return null;
+    try {
+      final raw = await runCommand(
+          'ping -c 1 -W 1 $ip 2>/dev/null | grep -o "ttl=[0-9]*" | head -1 || echo ""');
+      final m = RegExp(r'ttl=(\d+)').firstMatch(raw);
+      if (m == null) return null;
+      final ttl = int.tryParse(m.group(1)!) ?? 0;
+      if (ttl <= 0) return null;
+      // Бакеты начальных TTL: 32/64/128/255 (по умолчанию у разных ОС).
+      final int bucket;
+      if (ttl <= 32) { bucket = 32; } else if (ttl <= 64) { bucket = 64; }
+      else if (ttl <= 128) { bucket = 128; } else { bucket = 255; }
+      final hops = (bucket - ttl).clamp(0, 99);
+      final os = switch (bucket) {
+        32 => 'Embedded',
+        64 => 'Linux/Unix',
+        128 => 'Windows',
+        _ => 'Сетевое устройство',
+      };
+      return '$os · ~$hops хоп';
+    } catch (_) {
+      return null;
     }
   }
 

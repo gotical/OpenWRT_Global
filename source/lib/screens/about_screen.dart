@@ -97,6 +97,29 @@ class AboutScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
                 Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.palette_outlined),
+                    title: Text(strings.text('Тема')),
+                    subtitle: Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: SegmentedButton<ThemeMode>(
+                        segments: [
+                          ButtonSegment(value: ThemeMode.system, label: Text(strings.text('Системная')), icon: const Icon(Icons.brightness_auto, size: 16)),
+                          ButtonSegment(value: ThemeMode.light, label: Text(strings.text('Светлая')), icon: const Icon(Icons.light_mode, size: 16)),
+                          ButtonSegment(value: ThemeMode.dark, label: Text(strings.text('Тёмная')), icon: const Icon(Icons.dark_mode, size: 16)),
+                        ],
+                        selected: {OpenWrtManagerApp.of(context)?.currentThemeMode ?? ThemeMode.system},
+                        onSelectionChanged: (sel) {
+                          OpenWrtManagerApp.of(context)?.setThemeMode(sel.first);
+                        },
+                        showSelectedIcon: false,
+                      ),
+                    ),
+                    isThreeLine: true,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Card(
                   child: Column(
                     children: [
                       ListTile(

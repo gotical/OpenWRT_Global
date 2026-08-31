@@ -4,6 +4,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import '../l10n/app_strings.dart';
 import '../models/system_info.dart';
+import '../services/error_handler.dart';
 import '../services/openwrt_service.dart';
 import '../widgets/info_tile.dart';
 
@@ -14,7 +15,7 @@ class DashboardScreen extends StatefulWidget {
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> {
+class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingObserver {
   SystemInfo? info;
   bool loading = true;
   String? error;
@@ -27,14 +28,46 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String wifi24Name = '—', wifi5Name = '—';
   String interferenceLevel = '—';
   Color interferenceColor = Colors.grey;
+  // Живая скорость WAN (идея из OpenWrtManager NetworkTraffic / luci-mobile).
+  String wanRxSpeed = '—', wanTxSpeed = '—';
   final List<FlSpot> _cpu = [], _mem = [];
   int _tick = 0;
   Timer? _timer;
 
   @override
-  void initState() { super.initState(); _load(); _timer = Timer.periodic(const Duration(seconds: 5), (_) => _silent()); }
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _load();
+    _startTimer();
+  }
+
   @override
-  void dispose() { _timer?.cancel(); super.dispose(); }
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  // Автообновление ТОЛЬКО когда приложение активно и вкладка видна —
+  // раньше таймер тикал даже в фоне (идея из OpenWrtManager mainPage).
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _startTimer();
+      _silent();
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.detached) {
+      _timer?.cancel();
+      _timer = null;
+    }
+  }
+
+  void _startTimer() {
+    _timer?.cancel();
+    _timer = Timer.periodic(const Duration(seconds: 5), (_) => _silent());
+  }
 
   Future<void> _load() async {
     try {
@@ -110,7 +143,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Future<void> _silent() async {
     if (!mounted || loading || info == null) return;
-    try { final d = await widget.service.fetchSystemInfo(); _update(d); setState(() => info = d); } catch (_) {}
+    // Обновляемся только если вкладка «Обзор» сейчас видима.
+    final route = ModalRoute.of(context);
+    if (route != null && !route.isCurrent) return;
+    try {
+      final d = await widget.service.fetchSystemInfo();
+      _update(d);
+      String rx = wanRxSpeed, tx = wanTxSpeed;
+      try {
+        final t = await widget.service.fetchWanThroughput();
+        rx = _fmtSpeed(t.rxRate);
+        tx = _fmtSpeed(t.txRate);
+      } catch (_) {}
+      if (!mounted) return;
+      setState(() { info = d; wanRxSpeed = rx; wanTxSpeed = tx; });
+    } catch (_) {}
+  }
+
+  String _fmtSpeed(double bytesPerSec) {
+    if (bytesPerSec <= 0) return '—';
+    final bps = bytesPerSec * 8;
+    if (bps >= 1000000) return '${(bps / 1000000).toStringAsFixed(1)} Мбит/с';
+    if (bps >= 1000) return '${(bps / 1000).toStringAsFixed(0)} Кбит/с';
+    return '${bps.toStringAsFixed(0)} бит/с';
   }
 
   void _update(SystemInfo d) {
@@ -135,6 +190,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _statusRow(t), const SizedBox(height: 8),
         _statusRow2(t), const SizedBox(height: 16),
          Row(children: [Expanded(child: _stat(t, Icons.memory, 'CPU', '${(info!.cpuLoad*100).toStringAsFixed(1)}%', t.colorScheme.primary)), const SizedBox(width: 12), Expanded(child: _stat(t, Icons.storage, 'RAM', _h(info!.memoryUsed), t.colorScheme.tertiary, sub: '${s.text('из')} ${_h(info!.memoryTotal)}'))]),
+        const SizedBox(height: 12),
+         Row(children: [Expanded(child: _stat(t, Icons.arrow_downward, s.text('↓ Скорость'), wanRxSpeed, Colors.green)), const SizedBox(width: 12), Expanded(child: _stat(t, Icons.arrow_upward, s.text('↑ Скорость'), wanTxSpeed, Colors.blue))]),
         const SizedBox(height: 16),
          _chart(t, s.text('Загрузка CPU (%)'), _cpu, t.colorScheme.primary),
         const SizedBox(height: 12),
@@ -215,6 +272,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _err(ThemeData t) => SliverFillRemaining(child: Center(child: Padding(padding: const EdgeInsets.all(24), child: Column(mainAxisSize: MainAxisSize.min, children: [
      Icon(Icons.cloud_off, size: 72, color: t.colorScheme.error), const SizedBox(height: 16), Text(AppStrings.of(context).text('Ошибка подключения'), style: t.textTheme.titleMedium),
-     Text(error!, textAlign: TextAlign.center, style: TextStyle(color: t.colorScheme.onSurfaceVariant)), const SizedBox(height: 20), FilledButton.tonal(onPressed: _load, child: Text(AppStrings.of(context).text('Повторить'))),
+     Text(ErrorHandler.friendlyMessage(error), textAlign: TextAlign.center, style: TextStyle(color: t.colorScheme.onSurfaceVariant)),
+    const SizedBox(height: 20),
+    Row(mainAxisSize: MainAxisSize.min, children: [
+      FilledButton.tonal(onPressed: _load, child: Text(AppStrings.of(context).text('Повторить'))),
+      const SizedBox(width: 8),
+      OutlinedButton.icon(
+        onPressed: () => ErrorHandler.copyDiagnostics(context, error ?? ''),
+        icon: const Icon(Icons.copy, size: 16),
+        label: Text(AppStrings.of(context).text('Диагностика')),
+      ),
+    ]),
   ]))));
 }

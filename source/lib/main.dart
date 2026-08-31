@@ -51,6 +51,8 @@ class OpenWrtManagerAppState extends State<OpenWrtManagerApp> {
   ThemeMode _themeMode = ThemeMode.system;
   Locale _locale = const Locale('ru');
 
+  ThemeMode get currentThemeMode => _themeMode;
+
   @override
   void initState() {
     super.initState();
@@ -60,9 +62,29 @@ class OpenWrtManagerAppState extends State<OpenWrtManagerApp> {
         setState(() => _locale = Locale(code));
       }
     });
+    // Сохранённый выбор темы (Системная/Светлая/Тёмная).
+    StorageService.loadThemeMode().then((mode) {
+      if (!mounted) return;
+      setState(() {
+        _themeMode = switch (mode) {
+          'light' => ThemeMode.light,
+          'dark' => ThemeMode.dark,
+          _ => ThemeMode.system,
+        };
+      });
+    });
   }
 
-  void toggleTheme(ThemeMode mode) => setState(() => _themeMode = mode);
+  void toggleTheme(ThemeMode mode) => setThemeMode(mode);
+
+  Future<void> setThemeMode(ThemeMode mode) async {
+    setState(() => _themeMode = mode);
+    await StorageService.saveThemeMode(switch (mode) {
+      ThemeMode.light => 'light',
+      ThemeMode.dark => 'dark',
+      ThemeMode.system => 'system',
+    });
+  }
 
   Future<void> setLocale(Locale locale) async {
     setState(() => _locale = locale);

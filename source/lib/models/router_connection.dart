@@ -8,6 +8,9 @@ class RouterConnection {
   final bool useKey;
   final bool useHttps;
   final String? fingerprint;
+  /// Запасной адрес (идея из luci-mobile): если основной недоступен
+  /// (например, вы не в домашней сети), пробуем этот — DDNS/внешний IP.
+  final String? host2;
 
   RouterConnection({
     required this.name,
@@ -19,6 +22,7 @@ class RouterConnection {
     this.useKey = false,
     this.useHttps = false,
     this.fingerprint,
+    this.host2,
   });
 
   Map<String, dynamic> toJson() => {
@@ -31,6 +35,7 @@ class RouterConnection {
         'useKey': useKey,
         'useHttps': useHttps,
         'fingerprint': fingerprint,
+        if (host2 != null && host2!.isNotEmpty) 'host2': host2,
       };
 
   factory RouterConnection.fromJson(Map<String, dynamic> json) => RouterConnection(
@@ -44,5 +49,6 @@ class RouterConnection {
         useKey: json['useKey'] == true,
         useHttps: json['useHttps'] ?? false,
         fingerprint: json['fingerprint']?.toString(),
+        host2: json['host2']?.toString(),
       );
 }

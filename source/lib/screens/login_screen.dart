@@ -21,6 +21,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   final _name = TextEditingController(), _host = TextEditingController();
   final _port = TextEditingController(text: '22'), _user = TextEditingController(text: 'root');
   final _pass = TextEditingController(), _keyCtrl = TextEditingController();
+  final _host2 = TextEditingController(); // запасной адрес (luci-mobile)
   bool _obscure = true;
   bool _useKey = false;
 
@@ -36,7 +37,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     // Очистка буфера обмена от возможных паролей.
     Clipboard.setData(const ClipboardData(text: ''));
     _anim.dispose();
-    _name.dispose(); _host.dispose(); _port.dispose(); _user.dispose(); _pass.dispose(); _keyCtrl.dispose();
+    _name.dispose(); _host.dispose(); _port.dispose(); _user.dispose(); _pass.dispose(); _keyCtrl.dispose(); _host2.dispose();
     super.dispose();
   }
 
@@ -124,6 +125,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
         useKey: r.useKey,
         useHttps: r.useHttps,
         fingerprint: fingerprint,
+        host2: r.host2,
       );
     }).toList();
     if (changed) {
@@ -153,8 +155,10 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       _name.text = cfg.name; _host.text = cfg.host; _port.text = cfg.port.toString();
       _user.text = cfg.username; _pass.text = cfg.password;
       _keyCtrl.text = cfg.sshKey ?? ''; _useKey = cfg.useKey;
+      _host2.text = cfg.host2 ?? '';
     } else {
       _name.clear(); _host.clear(); _port.text = '22'; _user.text = 'root'; _pass.clear(); _keyCtrl.clear(); _useKey = false;
+      _host2.clear();
     }
     _obscure = true;
 
@@ -183,6 +187,16 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                   const SizedBox(width: 12),
                    Expanded(flex: 3, child: TextFormField(controller: _user, decoration: InputDecoration(labelText: s.username, prefixIcon: const Icon(Icons.person)), validator: (v) => v == null || v.isEmpty ? s.text('Обязательно') : null)),
                 ]),
+                const SizedBox(height: 12),
+                // Запасной адрес (идея из luci-mobile): используется, если основной недоступен.
+                TextFormField(
+                  controller: _host2,
+                  decoration: InputDecoration(
+                    labelText: s.text('Запасной адрес (опц.)'),
+                    hintText: s.text('DDNS или внешний IP — если основной недоступен'),
+                    prefixIcon: const Icon(Icons.public),
+                  ),
+                ),
                 const SizedBox(height: 12),
                 // Переключатель: пароль / ключ
                 Container(
@@ -253,7 +267,18 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                   ),
                 ),
                 const SizedBox(height: 24),
-                FilledButton(onPressed: () {
+                Row(children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _testConnection(ctx, setSt),
+                      icon: const Icon(Icons.network_check, size: 18),
+                      label: Text(s.text('Проверить')),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    flex: 2,
+                    child: FilledButton(onPressed: () {
                   if (_form.currentState!.validate()) {
                      _save(RouterConnection(
                       name: _name.text.trim(),
@@ -263,16 +288,60 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                       password: _pass.text,
                       sshKey: _useKey ? _keyCtrl.text.trim() : null,
                       useKey: _useKey,
+                      host2: _host2.text.trim().isEmpty ? null : _host2.text.trim(),
                     ));
                     Navigator.pop(ctx);
                   }
                  }, child: Text(cfg == null ? s.addRouter : s.save)),
+                  ),
+                ]),
               ]),
             ),
           ),
         ),
       ),
 );
+  }
+
+  /// Проверка подключения ДО сохранения (идея из OpenWrtManager) —
+  /// чтобы не сохранять заведомо нерабочий роутер.
+  Future<void> _testConnection(BuildContext ctx, StateSetter setSt) async {
+    final s = AppStrings.of(ctx);
+    if (!_form.currentState!.validate()) return;
+    final config = RouterConnection(
+      name: _name.text.trim(),
+      host: _host.text.trim(),
+      port: int.tryParse(_port.text) ?? 22,
+      username: _user.text.trim(),
+      password: _pass.text,
+      sshKey: _useKey ? _keyCtrl.text.trim() : null,
+      useKey: _useKey,
+      fingerprint: await StorageService.loadFingerprint(_host.text.trim()),
+      host2: _host2.text.trim().isEmpty ? null : _host2.text.trim(),
+    );
+    final service = OpenWrtService(config);
+    service.onVerifyHostKey = _verifyHostKey;
+    service.onFingerprintAccepted = (fp) => _saveFingerprintForHost(config.host, fp);
+    setSt(() {});
+    try {
+      await service.connect();
+      // Лёгкая команда, подтверждающая, что это OpenWrt.
+      await service.runCommand('ubus call system info 2>/dev/null | jsonfilter -e "@.uptime" 2>/dev/null || echo ok');
+      await service.disconnect();
+      if (ctx.mounted) {
+        ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+          content: Text('${s.text('Подключение успешно')} (${config.host}:${config.port})'),
+          backgroundColor: Colors.green,
+        ));
+      }
+    } catch (e) {
+      if (ctx.mounted) {
+        ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+          content: Text('${s.text('Ошибка')}: ${e.toString().replaceAll(config.password, '***')}'),
+          backgroundColor: Colors.red,
+        ));
+      }
+    }
   }
 
   Future<void> _generateKey(BuildContext ctx, StateSetter setSt) async {
@@ -286,6 +355,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       password: _pass.text,
       // Подтягиваем сохранённый fingerprint, чтобы не переспрашивать.
       fingerprint: await StorageService.loadFingerprint(host),
+      host2: _host2.text.trim().isEmpty ? null : _host2.text.trim(),
     );
     final service = OpenWrtService(config);
     service.onVerifyHostKey = _verifyHostKey;

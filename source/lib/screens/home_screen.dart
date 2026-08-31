@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../l10n/app_strings.dart';
+import '../main.dart';
 import '../models/router_connection.dart';
 import '../services/openwrt_service.dart';
 import '../services/storage_service.dart';
@@ -132,6 +133,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         useKey: r.useKey,
         useHttps: r.useHttps,
         fingerprint: fingerprint,
+        host2: r.host2,
       );
     }).toList();
     if (changed) {
@@ -552,6 +554,30 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                          title: Text(AppStrings.of(ctx).text('Настройки')),
                         content: SingleChildScrollView(
                           child: Column(mainAxisSize: MainAxisSize.min, children: [
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(AppStrings.of(ctx).text('Тема'), style: Theme.of(ctx).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+                                  const SizedBox(height: 8),
+                                  SegmentedButton<ThemeMode>(
+                                    segments: [
+                                      ButtonSegment(value: ThemeMode.system, label: Text(AppStrings.of(ctx).text('Системная')), icon: const Icon(Icons.brightness_auto, size: 16)),
+                                      ButtonSegment(value: ThemeMode.light, label: Text(AppStrings.of(ctx).text('Светлая')), icon: const Icon(Icons.light_mode, size: 16)),
+                                      ButtonSegment(value: ThemeMode.dark, label: Text(AppStrings.of(ctx).text('Тёмная')), icon: const Icon(Icons.dark_mode, size: 16)),
+                                    ],
+                                    selected: {OpenWrtManagerApp.of(ctx)?.currentThemeMode ?? ThemeMode.system},
+                                    onSelectionChanged: (sel) {
+                                      OpenWrtManagerApp.of(ctx)?.setThemeMode(sel.first);
+                                      setSt(() {});
+                                    },
+                                    showSelectedIcon: false,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 4),
                             SwitchListTile(
                               value: _hideNonFunctional,
                               onChanged: (v) async {

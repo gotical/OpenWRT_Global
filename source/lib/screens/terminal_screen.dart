@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../l10n/app_strings.dart';
 import '../services/openwrt_service.dart';
+import '../services/storage_service.dart';
 import '../widgets/ansi_terminal.dart';
 
 class TerminalScreen extends StatefulWidget {
@@ -40,6 +41,10 @@ class _TerminalScreenState extends State<TerminalScreen> {
   void initState() {
     super.initState();
     _term = AnsiTerminalController(cols: 80);
+    // История команд переживает перезапуск приложения.
+    StorageService.loadTerminalHistory().then((h) {
+      if (mounted) _history.addAll(h.where((e) => e.isNotEmpty));
+    });
   }
 
   @override
@@ -165,6 +170,8 @@ class _TerminalScreenState extends State<TerminalScreen> {
       _history.removeWhere((e) => e == line);
       _history.add(line);
       _historyIndex = _history.length;
+      // История переживает перезапуск приложения (идея из openwrt-router-control).
+      StorageService.saveTerminalHistory(_history);
     }
     if (_session == null || !_connected) {
       _appendOutput('${AppStrings.of(context).text('Терминал не подключён. Нажмите кнопку обновления.')}\n');
@@ -172,6 +179,140 @@ class _TerminalScreenState extends State<TerminalScreen> {
       _sendCommand(line);
     }
     _input.clear();
+  }
+
+  Future<void> _addFavorite() async {
+    final s = AppStrings.of(context);
+    final cmd = _input.text.trim();
+    if (cmd.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.text('Введите команду сначала'))));
+      return;
+    }
+    final favs = await StorageService.loadTerminalFavorites();
+    if (!favs.contains(cmd)) {
+      favs.add(cmd);
+      await StorageService.saveTerminalFavorites(favs);
+    }
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.text('Добавлено в избранное'))));
+    }
+  }
+
+  Future<void> _showHistoryDialog() async {
+    final s = AppStrings.of(context);
+    var favs = await StorageService.loadTerminalFavorites();
+    if (!mounted) return;
+    await showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSt) {
+          final history = _history.reversed.toList();
+          return SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                  child: Text(s.text('История команд'), style: Theme.of(ctx).textTheme.titleLarge),
+                ),
+                if (history.isEmpty && favs.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Center(child: Text(s.text('Пока нет команд'))),
+                  ),
+                if (favs.isNotEmpty) ...[
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 4, 20, 4),
+                    child: Text(s.text('Избранное'), style: Theme.of(ctx).textTheme.titleSmall),
+                  ),
+                  Flexible(
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: favs.length,
+                      itemBuilder: (_, i) {
+                        final c = favs[i];
+                        return ListTile(
+                          dense: true,
+                          leading: const Icon(Icons.star, size: 18, color: Colors.amber),
+                          title: Text(c, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontFamily: 'monospace', fontSize: 13)),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.delete_outline, size: 18),
+                            onPressed: () async {
+                              favs = List<String>.from(favs)..remove(c);
+                              await StorageService.saveTerminalFavorites(favs);
+                              if (ctx.mounted) setSt(() {});
+                            },
+                          ),
+                          onTap: () {
+                            Navigator.pop(ctx);
+                            _input.text = c;
+                            _input.selection = TextSelection.fromPosition(TextPosition(offset: c.length));
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+                Flexible(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: history.length,
+                    itemBuilder: (_, i) {
+                      final c = history[i];
+                      return ListTile(
+                        dense: true,
+                        leading: const Icon(Icons.history, size: 18),
+                        title: Text(c, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontFamily: 'monospace', fontSize: 13)),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.delete_outline, size: 18),
+                          onPressed: () async {
+                            _history.remove(c);
+                            await StorageService.saveTerminalHistory(_history);
+                            if (ctx.mounted) setSt(() {});
+                          },
+                        ),
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          _input.text = c;
+                          _input.selection = TextSelection.fromPosition(TextPosition(offset: c.length));
+                        },
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _arrowBtn(String label, String seq) {
+    final theme = Theme.of(context);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(6),
+        onTap: _connected ? () => _sendRaw(seq) : null,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey.shade400),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Text(label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: _connected ? (theme.brightness == Brightness.dark ? Colors.white70 : Colors.black54) : Colors.grey,
+              )),
+        ),
+      ),
+    );
   }
 
   Future<void> _reconnect() async {
@@ -332,6 +473,29 @@ class _TerminalScreenState extends State<TerminalScreen> {
                     ),
                   ),
                 ],
+                const SizedBox(height: 4),
+                // Панель клавиш: ESC, стрелки, избранное, история (идея из openwrt-router-control).
+                Row(
+                  children: [
+                    _ctrlBtn('ESC', 27),
+                    const SizedBox(width: 4),
+                    _arrowBtn('◀', '\u001B[D'),
+                    _arrowBtn('▲', '\u001B[A'),
+                    _arrowBtn('▼', '\u001B[B'),
+                    _arrowBtn('▶', '\u001B[C'),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      icon: const Icon(Icons.star_outline, size: 20),
+                      tooltip: s.text('В избранное'),
+                      onPressed: _addFavorite,
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.history, size: 20),
+                      tooltip: s.text('История'),
+                      onPressed: _showHistoryDialog,
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
