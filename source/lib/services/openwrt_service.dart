@@ -667,134 +667,136 @@ class OpenWrtService {
     await runCommand("uci set wireless.$device.htmode='$htMode'; uci commit wireless; wifi reload");
   }
 
-  Future<String> runSpeedtest() async {
+  /// Полноценный speedtest: задержка, скачивание с живым прогрессом,
+  /// загрузка, с фолбэком на несколько серверов и инструментов.
+  /// [onProgress] — стадия + текущая скорость (Мбит/с) для живого UI.
+  Future<String> runSpeedtest({void Function(String stage, double? currentMbps)? onProgress}) async {
     final tried = <String>[];
+    final sb = StringBuffer();
 
-    // Метод 1: Cloudflare (самый универсальный — PoP в РФ, Украине, Казахстане и ЕС).
-    // Не требует установки: достаточно curl, который есть почти на всех сборках.
+    // 1. Задержка и джиттер (ping).
+    onProgress?.call('ping', null);
+    String ping = '—';
     try {
-      final hasCurl = await runCommand('which curl 2>/dev/null && echo OK || echo NO').then((s) => s.trim());
-      if (hasCurl == 'OK') {
-        final r = await _cloudflareSpeedtest();
-        if (r != null) return r;
-        tried.add('cloudflare');
+      final r = await runCommand(
+        "ping -c 3 -W 2 1.1.1.1 2>&1 | tail -1 || echo '--- 0.0/0.0/0.0/0.0'");
+      final m = RegExp(r'([\d.]+)\/([\d.]+)\/([\d.]+)\/[\d.]+').firstMatch(r);
+      if (m != null) {
+        ping = '${m.group(2)!} мс (мин ${m.group(1)!}, макс ${m.group(3)!})';
+        final f = double.tryParse(m.group(1)!);
+        final rms = double.tryParse(m.group(3)!);
+        final jit = (f != null && rms != null) ? (rms - f).toStringAsFixed(1) : null;
+        if (jit != null) ping += ', джиттер ${jit} мс';
       }
-    } catch (_) { tried.add('cloudflare'); }
-
-    // Метод 2: iperf3 с публичными серверами СНГ/ЕС (замер и входящей, и исходящей).
-    try {
-      final hasIperf = await runCommand('which iperf3 2>/dev/null && echo OK || echo NO').then((s) => s.trim());
-      if (hasIperf == 'OK') {
-        final r = await _iperf3Speedtest();
-        if (r != null) return r;
-        tried.add('iperf3');
-      }
-    } catch (_) { tried.add('iperf3'); }
-
-    // Метод 3: speedtest-netperf (если установлен)
-    try {
-      final hasNetperf = await runCommand('which speedtest-netperf 2>/dev/null && echo OK || echo NO').then((s) => s.trim());
-      if (hasNetperf == 'OK') {
-        final r = await runCommand('speedtest-netperf 2>/dev/null').timeout(const Duration(seconds: 45));
-        if (r.isNotEmpty && (r.contains('Download') || r.contains('download'))) {
-          final dl = RegExp(r'Download:\s*(\d+\.?\d*)\s*(Mbps|Mbit)', caseSensitive: false).firstMatch(r);
-          final ul = RegExp(r'Upload:\s*(\d+\.?\d*)\s*(Mbps|Mbit)', caseSensitive: false).firstMatch(r);
-          return 'speedtest-netperf:\n'
-              '${dl != null ? "Входящая: ${dl.group(1)} Мбит/с" : ""}\n'
-              '${ul != null ? "Исходящая: ${ul.group(1)} Мбит/с" : ""}';
-        }
-        tried.add('speedtest-netperf');
-      }
-    } catch (_) { tried.add('speedtest-netperf'); }
-
-    // Метод 4 (fallback): wget/uclient-fetch с несколькими зеркалами
-    try {
-      final r = await _wgetSpeedtest();
-      if (r != null) return r;
     } catch (_) {}
 
-    // Ничего не сработало
-    return 'Speedtest не выполнен.\n'
-        'Проверьте интернет на роутере.\n'
-        'Установите: opkg update && opkg install curl iperf3\n'
-        'Проверены методы: ${tried.join(', ')}, wget';
-  }
-
-  /// Cloudflare speed test через curl. Замер и входящей (50 МБ), и исходящей (10 МБ).
-  /// Устойчив к busybox-curl: скорость считается по размеру файла и времени.
-  Future<String?> _cloudflareSpeedtest() async {
-    // Скачивание 50 МБ
-    final dlRaw = await runCommand(
-      "d=/tmp/cfs; mkdir -p \$d; s=\$(date +%s); "
-      "curl -s --max-time 30 -o \$d/dl.bin 'https://speed.cloudflare.com/__down?bytes=52428800'; "
-      "e=\$(date +%s); z=\$(wc -c < \$d/dl.bin 2>/dev/null || echo 0); rm -f \$d/dl.bin; "
-      "echo \"DL_BYTES:\$z DL_SECS:\$((e-s))\""
-    ).timeout(const Duration(seconds: 40));
-    final dlBytes = _extract(dlRaw, 'DL_BYTES:', ' DL_SECS');
-    final dlSecs = _extract(dlRaw, 'DL_SECS:', null);
-    final dl = _calcMbps(dlBytes, dlSecs);
-    if (dl == null) return null;
-
-    // Отдача 10 МБ
-    String ul = '';
-    try {
-      final ulRaw = await runCommand(
-        "d=/tmp/cfs; dd if=/dev/zero of=\$d/up.bin bs=1M count=10 2>/dev/null; "
-        "s=\$(date +%s); "
-        "curl -s --max-time 25 -o /dev/null -X POST --data-binary @\$d/up.bin 'https://speed.cloudflare.com/__up' 2>/dev/null; "
-        "e=\$(date +%s); z=\$(wc -c < \$d/up.bin 2>/dev/null || echo 0); rm -f \$d/up.bin; "
-        "echo \"UL_BYTES:\$z UL_SECS:\$((e-s))\""
-      ).timeout(const Duration(seconds: 35));
-      final ulCalc = _calcMbps(_extract(ulRaw, 'UL_BYTES:', ' UL_SECS'), _extract(ulRaw, 'UL_SECS:', null));
-      if (ulCalc != null) ul = 'Исходящая: $ulCalc Мбит/с\n';
-    } catch (_) {}
-
-    return 'Cloudflare:\n'
-        'Входящая: $dl Мбит/с\n'
-        '$ul'
-        'Точка: speed.cloudflare.com (ближайший PoP)';
-  }
-
-  /// iperf3 против публичных серверов СНГ/ЕС. Входящая и исходящая по отдельности.
-  Future<String?> _iperf3Speedtest() async {
-    const servers = [
-      ('iperf.volia.net', '5201'),          // Украина, Киев
-      ('iperf.online.net', '5201'),         // Франция, Париж
-      ('speedtest.milkywan.fr', '9200'),    // Франция
-      ('fra.speedtest.clouvider.net', '5200'), // Германия, Франкфурт
-      ('speedtest.wtnet.de', '5200'),       // Германия
-      ('speed1.fiberby.dk', '9201'),        // Дания, Копенгаген
-      ('test.uztelecom.uz', '5201'),        // Узбекистан, Ташкент
-      ('speedtest.serverius.net', '5002'),  // Нидерланды
+    // 2. Скачивание — с живым прогрессом (фоновая закачка + опрос).
+    onProgress?.call('download', null);
+    double? dlMbps;
+    const dlServers = <String>[
+      'https://speed.cloudflare.com/__down?bytes=73400320', // 70 МБ
+      'https://proof.ovh.net/files/100Mb.dat',
+      'http://speedtest.tele2.net/100MB.zip',
     ];
-    for (final (host, port) in servers) {
+    for (final url in dlServers) {
       try {
-        final dlRun = await runCommand(
-          'iperf3 -c $host -p $port -t 8 -P 3 -f m 2>&1 | tail -4'
-        ).timeout(const Duration(seconds: 25));
-        final dl = _lastMbits(dlRun);
-        if (dl == null) continue;
-        final ulRun = await runCommand(
-          'iperf3 -c $host -p $port -t 8 -P 3 -R -f m 2>&1 | tail -4'
-        ).timeout(const Duration(seconds: 25));
-        final ul = _lastMbits(ulRun);
-        return 'iperf3:\n'
-            'Входящая: $dl Мбит/с\n'
-            '${ul != null ? "Исходящая: $ul Мбит/с\n" : ""}'
-            'Сервер: $host ($port)';
+        dlMbps = await _liveDownload(url, onProgress);
+        if (dlMbps != null) {
+          sb.write('Входящая: ${dlMbps.toStringAsFixed(1)} Мбит/с\n');
+          break;
+        }
       } catch (_) {
-        continue;
+        tried.add('download:$url');
       }
     }
+
+    // 3. Загрузка.
+    onProgress?.call('upload', null);
+    double? ulMbps;
+    try {
+      ulMbps = await _uploadViaCurl();
+      if (ulMbps != null) {
+        sb.write('Исходящая: ${ulMbps.toStringAsFixed(1)} Мбит/с\n');
+      }
+    } catch (_) {
+      tried.add('upload');
+    }
+
+    if (dlMbps == null && ulMbps == null) {
+      // Полный фолбэк: wget.
+      onProgress?.call('fallback', null);
+      final f = await _wgetSpeedtest();
+      if (f != null) {
+        sb.write('$f\n');
+      } else {
+        sb.write('Сигнал консервативный: не удалось измерить.\n');
+      }
+    }
+
+    sb.write('\nЗадержка: $ping\n');
+    sb.write('Точка: speed.cloudflare.com / OVH / Tele2');
+    return sb.toString().trim();
+  }
+
+  /// Скачивание с живым прогрессом: фоновый curl + опрос размера файла.
+  Future<double?> _liveDownload(String url, void Function(String, double?)? onProgress) async {
+    // Старт фоновой закачки 70 МБ (или сколько скачает за лимит времени).
+    await runCommand("rm -f /tmp/owrt_dl.bin; (curl -s --max-time 12 -o /tmp/owrt_dl.bin '$url' >/dev/null 2>&1 &) ; echo OK");
+    final start = DateTime.now();
+    int prevBytes = 0;
+    double? live;
+    for (var i = 0; i < 22; i++) {
+      await Future.delayed(const Duration(milliseconds: 600));
+      try {
+        final b = await runCommand('wc -c < /tmp/owrt_dl.bin 2>/dev/null || echo 0');
+        final bytes = int.tryParse(b.trim()) ?? 0;
+        final secs = DateTime.now().difference(start).inMilliseconds / 1000.0;
+        if (secs > 0.5) {
+          final mbps = bytes * 8 / secs / 1000000;
+          live = mbps;
+          onProgress?.call('download', mbps);
+        }
+        prevBytes = bytes;
+        if (bytes == 0) continue;
+      } catch (_) {}
+    }
+    // Стоп и итог.
+    await runCommand('pkill -f "curl.*owrt_dl" 2>/dev/null || true');
+    final secs = DateTime.now().difference(start).inMilliseconds / 1000.0;
+    final finalBytes = await runCommand('wc -c < /tmp/owrt_dl.bin 2>/dev/null || echo 0').then((s) => int.tryParse(s.trim()) ?? 0);
+    await runCommand('rm -f /tmp/owrt_dl.bin');
+    if (secs > 0.5 && finalBytes > 1024) {
+      return finalBytes * 8 / secs / 1000000;
+    }
+    return live;
+  }
+
+  /// Загрузка через curl на Cloudflare __up (отдаём 10 МБ).
+  Future<double?> _uploadViaCurl() async {
+    final raw = await runCommand(
+      "dd if=/dev/zero of=/tmp/owrt_up.bin bs=1M count=10 2>/dev/null; "
+      "s=\$(date +%s); "
+      "curl -s --max-time 10 -o /dev/null -w '%{speed_upload}' -X POST --data-binary @/tmp/owrt_up.bin "
+      "'https://speed.cloudflare.com/__up' 2>/dev/null; "
+      "e=\$(date +%s); rm -f /tmp/owrt_up.bin; echo \" \$((e-s))\""
+    ).timeout(const Duration(seconds: 20));
+    final m = RegExp(r'([\d.]+)\s+(\d+)').firstMatch(raw);
+    if (m != null) {
+      final bps = double.tryParse(m.group(1)!);
+      if (bps != null && bps > 0) return bps * 8 / 1000000;
+    }
+    // Фолбэк: по байтам/времени.
+    final s = _extract(raw, ' ', null);
+    final secs = double.tryParse(s);
+    if (secs != null && secs > 0.5) return (10 * 1024 * 1024 * 8) / secs / 1000000;
     return null;
   }
 
   /// wget/uclient-fetch с зеркалами, доступными в РФ/СНГ/ЕС.
   Future<String?> _wgetSpeedtest() async {
-    const mirrors = [
+    const mirrors = <String>[
       'http://speedtest.tele2.net/10MB.zip',
       'http://mirror.yandex.ru/ubuntu-releases/24.04/ubuntu-24.04.2-desktop-amd64.iso',
-      'http://speedtest.ftp.otenet.gr/files/test1Mb.db',
       'http://speedtest.hosteurope.de/Download/10MB',
     ];
     for (final url in mirrors) {
@@ -808,7 +810,7 @@ class OpenWrtService {
             if (m != null) {
               final speed = double.tryParse(m.group(1)!) ?? 0;
               final mbps = (m.group(2)!.toUpperCase() == 'K' ? speed * 8 / 1000 : speed * 8).toStringAsFixed(1);
-              return 'wget speedtest:\nВходящая: $mbps Мбит/с\nЗеркало: $url';
+              return 'Входящая: $mbps Мбит/с (wget)\nЗеркало: $url';
             }
           }
         }

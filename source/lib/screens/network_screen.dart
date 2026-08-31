@@ -209,64 +209,40 @@ wifi reload
   }
 
   Future<void> _speedtest() async {
-     showDialog(context: context, barrierDismissible: false, builder: (ctx) => AlertDialog(content: Row(children: [const CircularProgressIndicator(), const SizedBox(width: 16), Text(_t('Проверка speedtest...'))])));
+    final dlgKey = GlobalKey<_SpeedTestDialogState>();
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _SpeedTestDialog(key: dlgKey),
+    );
     try {
       await widget.service.connect();
-      // Проверяем все доступные методы (Cloudflare-тест работает через curl)
-      String? availableMethod;
-      for (final method in ['curl', 'iperf3', 'speedtest-netperf', 'wget']) {
-        final check = await widget.service.runCommand('(type $method || command -v $method || test -x /usr/bin/$method || test -x /usr/sbin/$method) >/dev/null 2>&1 && echo OK || echo NO');
-        if (check.trim() == 'OK') { availableMethod = method; break; }
-      }
-
+      final result = await widget.service.runSpeedtest(
+        onProgress: (stage, mbps) {
+          final label = switch (stage) {
+            'ping' => _t('Задержка'),
+            'download' => _t('Скачивание'),
+            'upload' => _t('Загрузка'),
+            'fallback' => _t('wget'),
+            _ => stage,
+          };
+          dlgKey.currentState?.update(label, mbps);
+        },
+      );
       if (!mounted) return;
-      Navigator.pop(context);
-
-      if (availableMethod == null) {
-        final install = await showDialog<bool>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-             title: Text(_t('Не найдены инструменты замера')),
-             content: Text('${_t('Установить curl и iperf3?')}\n\n'
-                 '${_t('curl — универсальный тест через Cloudflare (точки в РФ/СНГ/ЕС)')}\n'
-                 '${_t('iperf3 — точный замер в обе стороны')}\n\n'
-                 '${_t('Также доступны: speedtest-netperf, wget')}'),
-            actions: [
-               TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(_t('Отмена'))),
-               FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(_t('Установить curl + iperf3'))),
-            ],
-          ),
-        );
-        if (install != true) return;
-         showDialog(context: context, barrierDismissible: false, builder: (ctx) => AlertDialog(content: Row(children: [const CircularProgressIndicator(), const SizedBox(width: 16), Text(_t('Установка curl и iperf3...'))])));
-        try {
-          await widget.service.installPackages(['curl', 'iperf3']);
-          if (!mounted) return;
-          Navigator.pop(context);
-        } catch (e) {
-          if (!mounted) return;
-          Navigator.pop(context);
-           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${_t('Ошибка установки')}: $e')));
-          return;
-        }
-      }
-
-       showDialog(context: context, barrierDismissible: false, builder: (ctx) => AlertDialog(content: Row(children: [const CircularProgressIndicator(), const SizedBox(width: 16), Text(_t('Speedtest... (~20-40 сек)'))])));
-      final result = await widget.service.runSpeedtest();
-      if (!mounted) return;
-      Navigator.pop(context);
+      Navigator.of(context, rootNavigator: true).pop();
       showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('Speedtest'),
+          title: Text('Speedtest'),
           content: SingleChildScrollView(child: SelectableText(result)),
-          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
+          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: Text(_t('Закрыть')))],
         ),
       );
     } catch (e) {
       if (!mounted) return;
-      Navigator.pop(context);
-       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${_t('Ошибка')}: $e')));
+      Navigator.of(context, rootNavigator: true).pop();
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${_t('Ошибка')}: $e')));
     }
   }
 
@@ -466,6 +442,51 @@ wifi reload
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Живой диалог speedtest: текущая стадия и скорость.
+class _SpeedTestDialog extends StatefulWidget {
+  const _SpeedTestDialog({super.key});
+  @override
+  State<_SpeedTestDialog> createState() => _SpeedTestDialogState();
+}
+
+class _SpeedTestDialogState extends State<_SpeedTestDialog> {
+  String _stage = '';
+  double? _mbps;
+
+  void update(String stage, double? mbps) {
+    if (!mounted) return;
+    setState(() {
+      _stage = stage;
+      _mbps = mbps;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
+    return AlertDialog(
+      title: Text(s.text('Speedtest')),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            const CircularProgressIndicator(strokeWidth: 3),
+            const SizedBox(width: 16),
+            Expanded(child: Text(_stage.isEmpty ? s.text('Подготовка...') : _stage)),
+          ]),
+          const SizedBox(height: 16),
+          Center(
+            child: Text(
+              _mbps != null ? '${_mbps!.toStringAsFixed(1)} ${s.text('Мбит/с')}' : '—',
+              style: TextStyle(fontSize: 34, fontWeight: FontWeight.w800, color: Colors.green),
+            ),
+          ),
+        ]),
       ),
     );
   }
