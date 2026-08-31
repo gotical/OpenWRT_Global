@@ -229,9 +229,11 @@ class ClientsScreenState extends State<ClientsScreen> {
   String _lookupOui(String prefix) => vendorCache[prefix] ?? '';
 
   Future<void> _loadVendor(ClientInfo c) async {
-    if (vendorCache.containsKey(c.mac.substring(0, 8))) return;
+    if (c.mac.length < 8) return; // защита от некорректных MAC
+    final prefix = c.mac.substring(0, 8);
+    if (vendorCache.containsKey(prefix)) return;
     final v = await widget.service.fetchMacVendor(c.mac);
-    setState(() => vendorCache[c.mac.substring(0, 8)] = v);
+    setState(() => vendorCache[prefix] = v);
   }
 
   Future<void> _classify(ClientInfo c) async {

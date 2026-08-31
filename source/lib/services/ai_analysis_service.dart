@@ -32,9 +32,15 @@ class AiAnalysisService {
 
   static Future<String?> _query(String prompt) async {
     if (_apiKey == null || _apiKey!.isEmpty) return null;
+    final provider = _activeProvider ?? 'openai';
+    final (url, model) = switch (provider) {
+      'deepseek' => ('https://api.deepseek.com/chat/completions', 'deepseek-chat'),
+      'openrouter' => ('https://openrouter.ai/api/v1/chat/completions', 'openai/gpt-4o-mini'),
+      _ => ('https://api.openai.com/v1/chat/completions', 'gpt-4o-mini'),
+    };
     try {
       final payload = jsonEncode({
-        'model': 'gpt-4o-mini',
+        'model': model,
         'messages': [
           {'role': 'user', 'content': prompt},
         ],
@@ -43,7 +49,7 @@ class AiAnalysisService {
       });
       final client = HttpClient();
       client.connectionTimeout = const Duration(seconds: 30);
-      final request = await client.postUrl(Uri.parse('https://api.openai.com/v1/chat/completions'));
+      final request = await client.postUrl(Uri.parse(url));
       request.headers.set('Content-Type', 'application/json');
       request.headers.set('Authorization', 'Bearer $_apiKey');
       request.add(utf8.encode(payload));
@@ -51,6 +57,7 @@ class AiAnalysisService {
       if (response.statusCode != 200) return null;
       final body = await response.transform(utf8.decoder).join();
       final json = jsonDecode(body);
+      // OpenRouter может вернуть choices[0].message.content
       return json['choices']?[0]?['message']?['content'] as String?;
     } catch (e) {
       AppLogger.e('AI query failed', e);

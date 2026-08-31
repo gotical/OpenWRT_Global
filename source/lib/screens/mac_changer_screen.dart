@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import '../l10n/app_strings.dart';
 import 'package:flutter/services.dart';
@@ -21,6 +22,8 @@ class _MacChangerScreenState extends State<MacChangerScreen> {
   bool _loading = true;
   bool _changing = false;
   String? _error;
+  // Контроллер живёт в состоянии — иначе поле сбрасывалось при каждом setState.
+  final _customMacCtrl = TextEditingController();
 
   final _ouiPool = [
     'Apple', 'Intel', 'Samsung', 'Huawei', 'Google',
@@ -43,7 +46,14 @@ class _MacChangerScreenState extends State<MacChangerScreen> {
   @override
   void initState() {
     super.initState();
+    _customMacCtrl.text = _randomMac();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _customMacCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -95,8 +105,10 @@ class _MacChangerScreenState extends State<MacChangerScreen> {
   }
 
   String _randomMac() {
-    final r = DateTime.now().microsecondsSinceEpoch;
-    final b = List.generate(6, (i) => (r >> (i * 8) & 0xFF));
+    // Криптостойкий случайный MAC (раньше — по времени, что давало
+    // предсказуемые и повторяющиеся адреса).
+    final random = Random.secure();
+    final b = List.generate(6, (_) => random.nextInt(256));
     b[0] = (b[0] & 0xFC) | 0x02; // locally administered
     return b.map((n) => n.toRadixString(16).padLeft(2, '0')).join(':');
   }
@@ -105,6 +117,13 @@ class _MacChangerScreenState extends State<MacChangerScreen> {
     final ouiPrefix = _ouiMap[oui] ?? '02:00:00';
     final rest = _randomMac().split(':').sublist(3).join(':');
     return '$ouiPrefix:$rest';
+  }
+
+  /// Приводит введённый MAC к виду XX:XX:XX:XX:XX:XX, либо null если невалиден.
+  String? _normalizeMac(String input) {
+    final hex = input.trim().toLowerCase().replaceAll(RegExp(r'[^0-9a-f]'), '');
+    if (hex.length != 12) return null;
+    return List.generate(6, (i) => hex.substring(i * 2, i * 2 + 2)).join(':');
   }
 
   Future<void> _changeMac(String newMac) async {
@@ -134,6 +153,20 @@ class _MacChangerScreenState extends State<MacChangerScreen> {
     } finally {
       if (mounted) setState(() => _changing = false);
     }
+  }
+
+  Future<void> _applyCustomMac() async {
+    final s = AppStrings.of(context);
+    final mac = _normalizeMac(_customMacCtrl.text);
+    if (mac == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(s.text('Некорректный MAC-адрес')), backgroundColor: Colors.red.shade700),
+        );
+      }
+      return;
+    }
+    await _changeMac(mac);
   }
 
   @override
@@ -216,19 +249,19 @@ class _MacChangerScreenState extends State<MacChangerScreen> {
                       children: [
                         Expanded(
                           child: TextField(
-                            controller: TextEditingController(text: _randomMac()),
+                            controller: _customMacCtrl,
                             style: const TextStyle(fontFamily: 'monospace', fontSize: 14),
                             decoration: InputDecoration(
                               hintText: 'XX:XX:XX:XX:XX:XX',
                               isDense: true,
                               border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                             ),
-                            onChanged: (v) {},
+                            onSubmitted: (_) => _applyCustomMac(),
                           ),
                         ),
                         const SizedBox(width: 8),
                         FilledButton(
-                          onPressed: _changing ? null : () => _changeMac(_randomMac()),
+                          onPressed: _changing ? null : _applyCustomMac,
                           child: _changing
                               ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                                : Text(s.text('Применить')),

@@ -1,15 +1,26 @@
+import 'dart:ui' show PlatformDispatcher;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/services.dart';
 import 'l10n/app_strings.dart';
 import 'screens/login_screen.dart';
+import 'services/app_logger.dart';
 import 'services/di_container.dart';
 import 'services/secure_screen.dart';
 import 'services/storage_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Глобальный перехват необработанных ошибок — иначе они теряются молча.
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+    AppLogger.e('Unhandled Flutter error', details.exception, details.stack);
+  };
+  PlatformDispatcher.instance.onError = (error, stack) {
+    AppLogger.e('Unhandled platform error', error, stack);
+    return true;
+  };
   setupDi();
   if (await StorageService.loadSecureScreen()) {
     SecureScreen.enable();

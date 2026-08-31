@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 import 'dart:typed_data';
 import 'package:pointycastle/export.dart';
 import 'package:pointycastle/src/registry/registry.dart';
@@ -60,10 +61,14 @@ class BackupService {
   }
 
   static Uint8List _generateIv() {
-    final secureRandom = FortunaRandom();
-    final seed = Uint8List(32);
-    secureRandom.seed(KeyParameter(seed));
-    return secureRandom.nextBytes(16);
+    // Криптостойкий случайный IV (раньше FortunaRandom сидировался нулями —
+    // IV повторялся и одинаковые данные шифровались одинаково).
+    final random = Random.secure();
+    final iv = Uint8List(16);
+    for (var i = 0; i < iv.length; i++) {
+      iv[i] = random.nextInt(256);
+    }
+    return iv;
   }
 
   static Uint8List _pad(Uint8List data) {
@@ -77,7 +82,15 @@ class BackupService {
   }
 
   static Uint8List _unpad(Uint8List data) {
+    if (data.isEmpty) throw Exception('Invalid padding');
     final padLen = data[data.length - 1];
+    if (padLen == 0 || padLen > 16 || padLen > data.length) {
+      throw Exception('Invalid padding');
+    }
+    // PKCS#7: все последние padLen байт должны равняться padLen.
+    for (var i = data.length - padLen; i < data.length; i++) {
+      if (data[i] != padLen) throw Exception('Invalid padding');
+    }
     return data.sublist(0, data.length - padLen);
   }
 

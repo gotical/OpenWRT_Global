@@ -266,6 +266,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
                     Expanded(
                       child: TextField(
                         controller: _input,
+                        autofocus: true, // сразу можно печатать команды
                         style: const TextStyle(fontFamily: 'monospace', fontSize: 14),
                         decoration: InputDecoration(
                           hintText: _connected ? s.text('Введите команду...') : s.text('Терминал не подключён'),

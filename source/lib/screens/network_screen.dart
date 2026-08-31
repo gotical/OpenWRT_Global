@@ -52,9 +52,18 @@ class _NetworkScreenState extends State<NetworkScreen> {
 
   Future<void> _disconnectWifiWan() async {
     try {
-      await widget.service.runCommand('uci delete wireless.@wifi-iface[-1] 2>/dev/null; uci commit wireless; wifi reload');
+      // Удаляем ТОЛЬКО клиентскую (sta) секцию — раньше удалялась последняя
+      // wifi-iface секция, из-за чего могла отключиться основная точка доступа.
+      await widget.service.runCommand('''
+for s in \$(uci show wireless 2>/dev/null | grep '=wifi-iface' | cut -d. -f2 | cut -d= -f1); do
+  m=\$(uci get wireless.\$s.mode 2>/dev/null || echo ap)
+  [ "\$m" = "sta" ] && uci delete wireless.\$s
+done
+uci commit wireless
+wifi reload
+''');
       await _load();
-       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_t('WiFi-клиент отключён'))));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_t('WiFi-клиент отключён'))));
     } catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e'))); }
   }
 
@@ -137,13 +146,14 @@ class _NetworkScreenState extends State<NetworkScreen> {
           title: Text(_t('Статический IP')),
           content: SingleChildScrollView(
             child: Column(mainAxisSize: MainAxisSize.min, children: [
-              TextField(controller: ipCtrl, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: _t('IP-адрес'))),
+              // Обычная клавиатура: IP содержит точки, цифровая их не показывает.
+              TextField(controller: ipCtrl, decoration: InputDecoration(labelText: _t('IP-адрес'))),
               const SizedBox(height: 8),
-              TextField(controller: maskCtrl, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: _t('Маска'))),
+              TextField(controller: maskCtrl, decoration: InputDecoration(labelText: _t('Маска'))),
               const SizedBox(height: 8),
-              TextField(controller: gwCtrl, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: _t('Шлюз'))),
+              TextField(controller: gwCtrl, decoration: InputDecoration(labelText: _t('Шлюз'))),
               const SizedBox(height: 8),
-              TextField(controller: dnsCtrl, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: _t('DNS'))),
+              TextField(controller: dnsCtrl, decoration: InputDecoration(labelText: _t('DNS'))),
             ]),
           ),
           actions: [

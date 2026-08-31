@@ -499,8 +499,20 @@ class _SystemScreenState extends State<SystemScreen> {
           TextButton(onPressed: () async {
             if (pwdCtrl.text.isEmpty) return;
             final routers = await StorageService.loadRouters();
-            final data = routers.map((r) => r.toJson()).toList();
-            final encrypted = BackupService.exportToJson({'routers': data, 'version': '4.0.7'}, pwdCtrl.text);
+            // Экспортируем ВСЕ поля, включая секреты — они зашифрованы AES-256,
+            // иначе бэкап нельзя было бы восстановить на другом устройстве.
+            final data = routers.map((r) => {
+              'name': r.name,
+              'host': r.host,
+              'port': r.port,
+              'username': r.username,
+              'password': r.password,
+              'sshKey': r.sshKey,
+              'useKey': r.useKey,
+              'useHttps': r.useHttps,
+              'fingerprint': r.fingerprint,
+            }).toList();
+            final encrypted = BackupService.exportToJson({'routers': data, 'version': '4.0.8'}, pwdCtrl.text);
             await showDialog(
               context: ctx,
               builder: (ctx) => AlertDialog(

@@ -562,7 +562,13 @@ class _WifiScreenState extends State<WifiScreen> {
                  subtitle: Text('${s.text('Сигнал')}: ${n['signal']} dBm • ${s.text('Канал')} ${n['channel']}'),
                   onTap: () {
                     Navigator.pop(ctx);
-                    _connectToWifi(dev, n['ssid']!);
+                    final ssid = (n['ssid'] ?? '').trim();
+                    if (ssid.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(s.text('Сеть без имени — подключение невозможно'))));
+                      return;
+                    }
+                    _connectToWifi(dev, ssid);
                   },
                 );
               },

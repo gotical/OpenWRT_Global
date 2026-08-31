@@ -67,6 +67,12 @@ class ClientMonitor {
         }
       }
       await StorageService.saveKnownClients(_known);
+      // Ограничиваем рост списка известных клиентов (каждое новое устройство
+      // оставалось там навсегда — при большом числе гостей список разрастался).
+      if (_known.length > 500) {
+        _known = _known.take(500).toSet();
+        await StorageService.saveKnownClients(_known);
+      }
       await StorageService.saveConnLog(log);
     } catch (_) {}
   }

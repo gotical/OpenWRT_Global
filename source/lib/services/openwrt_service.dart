@@ -177,6 +177,12 @@ class OpenWrtService {
     return _enqueue(() => _runCommand(command, timeout));
   }
 
+  /// Команды, которым нужно больше времени (opkg update/install и т.п.),
+  /// иначе стандартный таймаут 30 с обрывает установку пакетов.
+  Future<String> runCommandLong(String command, {Duration timeout = const Duration(minutes: 5)}) {
+    return _enqueue(() => _runCommand(command, timeout));
+  }
+
   Future<String> _runCommand(String command, Duration timeout) async {
     if (_client == null || !_connected) {
       await _connectInternal();
@@ -521,6 +527,11 @@ class OpenWrtService {
     else if (raw.contains('WPA')) result['encryption'] = 'WPA';
     else if (raw.contains('WEP')) result['encryption'] = 'WEP';
     else result['encryption'] = 'Открытая';
+    // 2b. SSID этой точки (раньше не заполнялся — пароль из UCI не находился)
+    final ssidMatch = RegExp(r'SSID:\s*([^\r\n]+)', caseSensitive: false).firstMatch(raw);
+    result['ssid'] = ssidMatch != null
+        ? ssidMatch.group(1)!.trim().replaceAll('"', '').replaceAll("'", '')
+        : '';
     // 3. Пароль из UCI (если наша сеть)
     try {
       final networks = await fetchWifiNetworks();
@@ -807,25 +818,25 @@ class OpenWrtService {
   String _fmt(String r) => r;
 
   Future<void> addGuestNetwork({required String radioDevice, required String ssid}) async {
+    final esc = (String s) => s.replaceAll("'", "'\\''");
     final cmd = """
 uci add wireless wifi-iface
-uci set wireless.@wifi-iface[-1].device='\${radioDevice}'
+uci set wireless.@wifi-iface[-1].device='${esc(radioDevice)}'
 uci set wireless.@wifi-iface[-1].network='guest'
 uci set wireless.@wifi-iface[-1].mode='ap'
-uci set wireless.@wifi-iface[-1].ssid='\${ssid}'
+uci set wireless.@wifi-iface[-1].ssid='${esc(ssid)}'
 uci set wireless.@wifi-iface[-1].encryption='none'
 uci set wireless.@wifi-iface[-1].isolate='1'
-uci add_list network.lan.ipaddr='10.0.0.1/24' 2>/dev/null || true
 uci set network.guest=interface
 uci set network.guest.proto='static'
 uci set network.guest.ipaddr='192.168.3.1'
 uci set network.guest.netmask='255.255.255.0'
-uci add firewall zone 2>/dev/null || true
-uci set firewall.@zone[-1].name='guest'
-uci set firewall.@zone[-1].network='guest'
-uci set firewall.@zone[-1].input='ACCEPT'
-uci set firewall.@zone[-1].output='ACCEPT'
-uci set firewall.@zone[-1].forward='REJECT'
+z=\$(uci add firewall zone)
+uci set firewall.\$z.name='guest'
+uci set firewall.\$z.network='guest'
+uci set firewall.\$z.input='ACCEPT'
+uci set firewall.\$z.output='ACCEPT'
+uci set firewall.\$z.forward='REJECT'
 uci commit wireless
 uci commit network
 uci commit firewall
@@ -837,20 +848,24 @@ wifi reload
   }
 
   Future<void> toggleGuestNetwork(String section, bool enable) async {
-    await runCommand("uci set wireless.\$section.disabled=\${enable ? '0' : '1'}; uci commit wireless; wifi reload");
+    await runCommand("uci set wireless.$section.disabled=${enable ? '0' : '1'}; uci commit wireless; wifi reload");
   }
 
   Future<void> scheduleWifi(String section, {String? start, String? stop, bool? enabled}) async {
     if (enabled != null) {
-      await runCommand("uci set wireless.\$section.sched_enabled=\${enabled ? '1' : '0'}");
+      await runCommand("uci set wireless.$section.sched_enabled=${enabled ? '1' : '0'}");
+    } else if (start != null || stop != null) {
+      // Расписание задаётся — включаем планировщик, иначе он не сработает.
+      await runCommand("uci set wireless.$section.sched_enabled='1'");
     }
     if (start != null) {
-      await runCommand("uci set wireless.\$section.sched_start='\${start}'");
+      await runCommand("uci set wireless.$section.sched_start='$start'");
     }
     if (stop != null) {
-      await runCommand("uci set wireless.\$section.sched_stop='\${stop}'");
+      await runCommand("uci set wireless.$section.sched_stop='$stop'");
     }
     await runCommand('uci commit wireless');
+    await runCommand('wifi reload 2>/dev/null || true');
   }
 
   Future<void> addPortForward({
@@ -860,15 +875,17 @@ wifi reload
     required String destPort,
     String proto = 'tcp',
   }) async {
+    final esc = (String s) => s.replaceAll("'", "'\\''");
     final cmd = """
 uci add firewall redirect
-uci set firewall.@redirect[-1].name='\${name}'
+uci set firewall.@redirect[-1].name='${esc(name)}'
 uci set firewall.@redirect[-1].src='wan'
-uci set firewall.@redirect[-1].proto='\${proto}'
-uci set firewall.@redirect[-1].src_dport='\${srcDport}'
-uci set firewall.@redirect[-1].dest_ip='\${destIp}'
-uci set firewall.@redirect[-1].dest_port='\${destPort}'
+uci set firewall.@redirect[-1].proto='${esc(proto)}'
+uci set firewall.@redirect[-1].src_dport='${esc(srcDport)}'
+uci set firewall.@redirect[-1].dest_ip='${esc(destIp)}'
+uci set firewall.@redirect[-1].dest_port='${esc(destPort)}'
 uci set firewall.@redirect[-1].target='DNAT'
+uci set firewall.@redirect[-1].enabled='1'
 uci commit firewall
 /etc/init.d/firewall reload
 """;
@@ -1115,12 +1132,13 @@ uci commit firewall
   }
 
   Future<void> restoreConfig(String base64Config) async {
-    await runCommand("echo '\$base64Config' | base64 -d | sysupgrade -r - || true");
-    await runCommand('reboot');
+    await runCommandLong("echo '$base64Config' | base64 -d | sysupgrade -r - || true");
+    await runCommandLong('reboot');
   }
 
   Future<void> wakeOnLan(String mac) async {
-    await runCommand("which wol 2>/dev/null && wol '\$mac' || (opkg install wol 2>/dev/null && wol '\$mac') || echo 'wol not available'");
+    final clean = mac.trim().toLowerCase();
+    await runCommand("which wol 2>/dev/null && wol '$clean' || (opkg install wol 2>/dev/null && wol '$clean') || (which etherwake 2>/dev/null && etherwake -i br-lan '$clean') || echo 'wol not available'");
   }
 
   Future<String> fetchDnsSettings() async {
@@ -1128,8 +1146,10 @@ uci commit firewall
   }
 
   Future<void> setDns(List<String> servers) async {
+    final esc = (String s) => s.replaceAll("'", "'\\''");
     for (final s in servers) {
-      await runCommand("uci add_list dhcp.@dnsmasq[0].server='$s'");
+      if (s.trim().isEmpty) continue;
+      await runCommand("uci add_list dhcp.@dnsmasq[0].server='${esc(s.trim())}'");
     }
     await runCommand('uci commit dhcp; /etc/init.d/dnsmasq restart');
   }
@@ -1141,9 +1161,9 @@ uci commit firewall
       onProgress(name, 'downloading');
       try {
         if (pkg == 'APK') {
-          await runCommand('apk add \$name');
+          await runCommandLong('apk add $name');
         } else {
-          await runCommand('opkg install \$name');
+          await runCommandLong('opkg install $name');
         }
         onProgress(name, 'done');
         result[name] = true;
@@ -1186,10 +1206,10 @@ uci commit firewall
     final check = await runCommand('which auc 2>/dev/null || echo "NOT_FOUND"');
     if (check.contains('NOT_FOUND')) {
       onProgress('installing_auc');
-      await runCommand('opkg update && opkg install auc');
+      await runCommandLong('opkg update && opkg install auc');
     }
     onProgress('downloading');
-    await runCommand('auc -y -b 0 -r 2>&1 || echo "FAIL"');
+    await runCommandLong('auc -y -b 0 -r 2>&1 || echo "FAIL"', timeout: const Duration(minutes: 10));
     onProgress('rebooting');
     return 'Роутер перезагружается...';
   }
@@ -1557,7 +1577,10 @@ echo "$stopM $stopH * * * nft delete element inet fw4 blocklist { $cleanMac } 2>
 
   Future<String> fetchMacVendor(String mac) async {
     try {
-      final prefix = mac.replaceAll(':', '').substring(0, 6).toLowerCase();
+      final hex = mac.replaceAll(':', '').replaceAll('-', '').toLowerCase();
+      // Защита от некорректных/коротких MAC (иначе RangeError при substring).
+      if (hex.length < 6) return 'Неизвестно';
+      final prefix = hex.substring(0, 6);
       final raw = await runCommand('wget -qO- --timeout=3 https://api.macvendors.com/$prefix 2>/dev/null || echo ""');
       return raw.trim().isNotEmpty ? raw.trim() : 'Неизвестно';
     } catch (_) {
@@ -1858,6 +1881,15 @@ echo "$stopM $stopH * * * nft delete element inet fw4 blocklist { $cleanMac } 2>
 
   String _shq(String s) => "'${s.replaceAll("'", "'\\''")}'";
 
+  /// Имя интерфейса/секции uci: только буквы, цифры и подчёркивание,
+  /// иначе команда uci сломается или позволит инъекцию в shell.
+  String _safeIfaceName(String name) {
+    final cleaned = name.trim().replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '_');
+    if (cleaned.isEmpty) return 'vpn';
+    if (RegExp(r'^[0-9]').hasMatch(cleaned)) return 'vpn_$cleaned';
+    return cleaned;
+  }
+
   /// Содержимое каталога на USB-накопителе: имя, размер (байты), признак каталога.
   Future<List<Map<String, String>>> listUsbDir(String path) async {
     final raw = await runCommand("ls -la '${_shq(path)}' 2>&1");
@@ -1928,7 +1960,7 @@ echo "$stopM $stopH * * * nft delete element inet fw4 blocklist { $cleanMac } 2>
       final arp = await runCommand('cat /proc/net/arp 2>/dev/null | tail -n +2 || echo ""');
       for (final line in LineSplitter.split(arp)) {
         final parts = line.trim().split(RegExp(r'\s+'));
-        if (parts.length >= 4) {
+        if (parts.length >= 6) {
           result.add({'ip': parts[0], 'mac': parts[3].toLowerCase(), 'iface': parts[5], 'type': 'arp'});
         }
       }
@@ -2019,15 +2051,15 @@ echo "$stopM $stopH * * * nft delete element inet fw4 blocklist { $cleanMac } 2>
   }
 
   Future<String> installPackage(String name) async {
-    return runCommand('opkg install $name');
+    return runCommandLong('opkg install $name');
   }
 
   Future<String> removePackage(String name) async {
-    return runCommand('opkg remove $name');
+    return runCommandLong('opkg remove $name');
   }
 
   Future<String> updatePackageLists() async {
-    return runCommand('opkg update');
+    return runCommandLong('opkg update');
   }
 
   Future<void> reboot() async {
@@ -2243,16 +2275,17 @@ echo "$stopM $stopH * * * nft delete element inet fw4 blocklist { $cleanMac } 2>
 
   Future<void> addL2tpClient({required String name, required String server, required String username, required String password, String? secret}) async {
     final esc = (String s) => s.replaceAll("'", "'\\''");
-    await runCommand('opkg list-installed | grep -q xl2tpd || opkg install xl2tpd resolveip');
+    final safeName = _safeIfaceName(name);
+    await runCommandLong('opkg list-installed | grep -q xl2tpd || opkg install xl2tpd resolveip');
     await runCommand("""
-uci set network.${esc(name)}=interface
-uci set network.${esc(name)}.proto='l2tp'
-uci set network.${esc(name)}.server='${esc(server)}'
-uci set network.${esc(name)}.username='${esc(username)}'
-uci set network.${esc(name)}.password='${esc(password)}'
-${secret != null ? "uci set network.${esc(name)}.ipsec_secret='${esc(secret)}'" : ""}
-uci set network.${esc(name)}.ipsec_demand='1'
-uci set network.${esc(name)}.defaultroute='0'
+uci set network.${safeName}=interface
+uci set network.${safeName}.proto='l2tp'
+uci set network.${safeName}.server='${esc(server)}'
+uci set network.${safeName}.username='${esc(username)}'
+uci set network.${safeName}.password='${esc(password)}'
+${secret != null ? "uci set network.${safeName}.ipsec_secret='${esc(secret)}'" : ""}
+uci set network.${safeName}.ipsec_demand='1'
+uci set network.${safeName}.defaultroute='0'
 uci commit network
 /etc/init.d/network reload
 """);
@@ -2260,13 +2293,14 @@ uci commit network
 
   Future<void> addPptpClient({required String name, required String server, required String username, required String password}) async {
     final esc = (String s) => s.replaceAll("'", "'\\''");
-    await runCommand('opkg list-installed | grep -q pptp || opkg install pptp');
+    final safeName = _safeIfaceName(name);
+    await runCommandLong('opkg list-installed | grep -q pptp || opkg install pptp');
     await runCommand("""
-uci set network.${esc(name)}=interface
-uci set network.${esc(name)}.proto='pptp'
-uci set network.${esc(name)}.server='${esc(server)}'
-uci set network.${esc(name)}.username='${esc(username)}'
-uci set network.${esc(name)}.password='${esc(password)}'
+uci set network.${safeName}=interface
+uci set network.${safeName}.proto='pptp'
+uci set network.${safeName}.server='${esc(server)}'
+uci set network.${safeName}.username='${esc(username)}'
+uci set network.${safeName}.password='${esc(password)}'
 uci commit network
 /etc/init.d/network reload
 """);
@@ -2283,20 +2317,23 @@ uci commit network
 
   Future<void> addSstpClient({required String name, required String server, required String username, required String password}) async {
     final esc = (String s) => s.replaceAll("'", "'\\''");
-    await runCommand('opkg list-installed | grep -q sstp-client || opkg install sstp-client');
-    await runCommand("uci set network.$name=interface; uci set network.$name.proto='sstp'; uci set network.$name.server='${esc(server)}'; uci set network.$name.username='${esc(username)}'; uci set network.$name.password='${esc(password)}'; uci set network.$name.defaultroute='0'; uci commit network; /etc/init.d/network reload");
+    final safeName = _safeIfaceName(name);
+    await runCommandLong('opkg list-installed | grep -q sstp-client || opkg install sstp-client');
+    await runCommand("uci set network.$safeName=interface; uci set network.$safeName.proto='sstp'; uci set network.$safeName.server='${esc(server)}'; uci set network.$safeName.username='${esc(username)}'; uci set network.$safeName.password='${esc(password)}'; uci set network.$safeName.defaultroute='0'; uci commit network; /etc/init.d/network reload");
   }
 
   Future<void> addIpsecClient({required String name, required String server, required String username, required String password, required String psk}) async {
     final esc = (String s) => s.replaceAll("'", "'\\''");
-    await runCommand('opkg list-installed | grep -q strongswan || opkg install strongswan-default');
-    await runCommand("uci set network.$name=interface; uci set network.$name.proto='ipsec'; uci set network.$name.server='${esc(server)}'; uci set network.$name.username='${esc(username)}'; uci set network.$name.password='${esc(password)}'; uci set network.$name.ipsec_psk='${esc(psk)}'; uci commit network; /etc/init.d/network reload");
+    final safeName = _safeIfaceName(name);
+    await runCommandLong('opkg list-installed | grep -q strongswan || opkg install strongswan-default');
+    await runCommand("uci set network.$safeName=interface; uci set network.$safeName.proto='ipsec'; uci set network.$safeName.server='${esc(server)}'; uci set network.$safeName.username='${esc(username)}'; uci set network.$safeName.password='${esc(password)}'; uci set network.$safeName.ipsec_psk='${esc(psk)}'; uci commit network; /etc/init.d/network reload");
   }
 
   Future<void> importOpenvpnConfig({required String name, required String ovpnContent}) async {
     final b64 = base64Encode(utf8.encode(ovpnContent));
-    await runCommand('opkg list-installed | grep -q openvpn || opkg install openvpn-openssl');
-    await runCommand("echo '$b64' | base64 -d > /etc/openvpn/$name.ovpn; uci set openvpn.$name=openvpn; uci set openvpn.$name.enabled='1'; uci set openvpn.$name.config='/etc/openvpn/$name.ovpn'; uci commit openvpn; /etc/init.d/openvpn start $name 2>/dev/null || true");
+    final safeName = _safeIfaceName(name);
+    await runCommandLong('opkg list-installed | grep -q openvpn || opkg install openvpn-openssl');
+    await runCommand("echo '$b64' | base64 -d > /etc/openvpn/$safeName.ovpn; uci set openvpn.$safeName=openvpn; uci set openvpn.$safeName.enabled='1'; uci set openvpn.$safeName.config='/etc/openvpn/$safeName.ovpn'; uci commit openvpn; /etc/init.d/openvpn start $safeName 2>/dev/null || true");
   }
 
   Future<void> vpnDown(String name) async {
@@ -2336,38 +2373,39 @@ uci commit network
   }) async {
     final proto = amnezia ? 'amneziawg' : 'wireguard';
     final pkg = amnezia ? 'amneziawg-tools' : 'wireguard-tools';
+    final safeName = _safeIfaceName(name);
     final cfg = '''
-uci set network.$name=interface
-uci set network.$name.proto='$proto'
-uci set network.$name.private_key='$privateKey'
-uci set network.$name.listen_port='$listenPort'
-uci add_list network.$name.addresses='$addresses'
+uci set network.$safeName=interface
+uci set network.$safeName.proto='$proto'
+uci set network.$safeName.private_key='$privateKey'
+uci set network.$safeName.listen_port='$listenPort'
+uci add_list network.$safeName.addresses='$addresses'
 
-uci set network.${name}_peer=wireguard_$name
-uci set network.${name}_peer.public_key='$publicKey'
-uci set network.${name}_peer.persistent_keepalive='25'
-uci set network.${name}_peer.endpoint_host='${endpoint.split(':').first}'
-uci set network.${name}_peer.endpoint_port='${endpoint.contains(':') ? endpoint.split(':').last : '51820'}'
+uci set network.${safeName}_peer=wireguard_$safeName
+uci set network.${safeName}_peer.public_key='$publicKey'
+uci set network.${safeName}_peer.persistent_keepalive='25'
+uci set network.${safeName}_peer.endpoint_host='${endpoint.split(':').first}'
+uci set network.${safeName}_peer.endpoint_port='${endpoint.contains(':') ? endpoint.split(':').last : '51820'}'
 
 for ip in ${allowedIps.replaceAll(',', ' ')}; do
-  uci add_list network.${name}_peer.allowed_ips="\$ip"
+  uci add_list network.${safeName}_peer.allowed_ips="\$ip"
 done
 
 # Firewall zone
-uci set firewall.${name}_zone=zone
-uci set firewall.${name}_zone.name='vpn'
-uci set firewall.${name}_zone.input='ACCEPT'
-uci set firewall.${name}_zone.output='ACCEPT'
-uci set firewall.${name}_zone.forward='REJECT'
-uci set firewall.${name}_zone.masq='1'
-uci add_list firewall.${name}_zone.network='$name'
+uci set firewall.${safeName}_zone=zone
+uci set firewall.${safeName}_zone.name='vpn'
+uci set firewall.${safeName}_zone.input='ACCEPT'
+uci set firewall.${safeName}_zone.output='ACCEPT'
+uci set firewall.${safeName}_zone.forward='REJECT'
+uci set firewall.${safeName}_zone.masq='1'
+uci add_list firewall.${safeName}_zone.network='$safeName'
 
 uci commit network
 uci commit firewall
 /etc/init.d/network reload
 /etc/init.d/firewall reload
 '''.trim();
-    await runCommand('opkg list-installed | grep -q $pkg || opkg install $pkg');
+    await runCommandLong('opkg list-installed | grep -q $pkg || opkg install $pkg');
     await runCommand(cfg);
   }
 
@@ -2464,7 +2502,7 @@ uci commit firewall
 
     Future<bool> tryInstall(String cmd) async {
       try {
-        await runCommand(cmd);
+        await runCommandLong(cmd);
         return true;
       } catch (_) {
         return false;
@@ -2585,7 +2623,16 @@ uci commit firewall
     final Set<String> activeMacs = {};
     final Set<String> wifiMacs = {};
     final Set<String> wiredMacs = {};
-    final String routerIp = '192.168.1.1';
+    // IP роутера в LAN — его не показываем как клиента (раньше был захардкожен 192.168.1.1,
+    // из-за чего на роутерах с другой подсетью сам роутер появлялся в списке устройств).
+    String routerIp = '192.168.1.1';
+    try {
+      final r = await runCommand(
+          "ubus call network.interface.lan status 2>/dev/null | jsonfilter -e '@[\"ipv4-address\"][0].address' 2>/dev/null || "
+          "uci get network.lan.ipaddr 2>/dev/null || echo ''");
+      final t = r.trim();
+      if (t.isNotEmpty && !t.contains('command not found')) routerIp = t;
+    } catch (_) {}
 
     // 1. Одним SSH-запросом получаем все данные
     final raw = await runCommand("""

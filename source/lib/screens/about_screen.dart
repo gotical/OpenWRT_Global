@@ -69,7 +69,7 @@ class AboutScreen extends StatelessWidget {
                 const SizedBox(height: 4),
                 Center(
                    child: Text(
-                     '${strings.version} 4.0.7',
+                     '${strings.version} 4.0.8',
                     style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                   ),
                  ),

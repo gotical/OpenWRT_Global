@@ -613,7 +613,7 @@ ListTile(
               const Spacer(),
               const Padding(
                 padding: EdgeInsets.all(16),
-                  child: Text('OPENWRT - Global v4.0.7\nРыбинскLAB', style: TextStyle(color: Colors.grey), textAlign: TextAlign.center),
+                  child: Text('OPENWRT - Global v4.0.8\nРыбинскLAB', style: TextStyle(color: Colors.grey), textAlign: TextAlign.center),
               ),
             ],
           ),
