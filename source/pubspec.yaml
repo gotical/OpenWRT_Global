@@ -53,6 +53,9 @@ dependencies:
   pointycastle: ^4.0.0
   flutter_local_notifications: ^22.2.0
   qr_flutter: ^4.1.0
+  # Файловый менеджер: выбор файла с телефона и путь для сохранения.
+  file_picker: ^8.1.4
+  path_provider: ^2.1.5
 
 dev_dependencies:
   flutter_test:
@@ -64,6 +67,12 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+
+# path_provider_android 2.3.x перешёл на JNI-привязки (пакет jni собирает
+# нативный код через CMake/NDK, что невозможно на Termux). 2.2.x использует
+# метод-каналы и собирается без нативного кода.
+dependency_overrides:
+  path_provider_android: 2.2.14
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

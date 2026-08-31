@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show IOSink;
 import 'dart:typed_data';
 import 'package:dartssh2/dartssh2.dart';
 import '../models/router_connection.dart';
@@ -2019,6 +2020,205 @@ echo "$stopM $stopH * * * nft delete element inet fw4 blocklist { $cleanMac } 2>
   Future<void> deleteUsbFile(String path) async {
     final r = await runCommand("rm -f '${_shq(path)}' 2>&1 && echo OK || echo FAIL");
     if (!r.trim().endsWith('OK')) throw Exception('Не удалось удалить файл');
+  }
+
+  // ===== Файловый менеджер (USB/SSD/HDD) =====
+
+  /// Размер удалённого файла в байтах (wc -c работает везде на busybox).
+  Future<int> getRemoteFileSize(String path) async {
+    final raw = await runCommand("wc -c < '${_shq(path)}' 2>/dev/null || echo 0");
+    return int.tryParse(raw.trim()) ?? 0;
+  }
+
+  /// Доступен ли SFTP на роутере (openssh-sftp-server).
+  /// У dropbear его нет — тогда перенос идёт через base64.
+  Future<bool> sftpAvailable() async {
+    try {
+      final sftp = await _client!.sftp();
+      await sftp.stat('.');
+      await sftp.close();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Скачать удалённый файл (с накопителя) на телефон через SFTP.
+  Future<void> downloadFileSftp({
+    required String remotePath,
+    required StreamSink<List<int>> destination,
+    void Function(int done, int? total)? onProgress,
+  }) async {
+    final sftp = await _client!.sftp();
+    try {
+      SftpFileAttrs? attrs;
+      try {
+        attrs = await sftp.stat(remotePath);
+      } catch (_) {}
+      final total = attrs?.size;
+      await sftp.download(
+        remotePath,
+        destination,
+        onProgress: (b) => onProgress?.call(b, total),
+      );
+    } finally {
+      await sftp.close();
+    }
+  }
+
+  /// Скачать удалённый файл через base64-чанки (работает и на dropbear).
+  Future<void> downloadFileBase64({
+    required String remotePath,
+    required IOSink localSink,
+    void Function(int done, int? total)? onProgress,
+  }) async {
+    const chunk = 512 * 1024;
+    int total = 0;
+    try {
+      total = await getRemoteFileSize(remotePath);
+    } catch (_) {}
+    int offset = 0;
+    while (true) {
+      final skip = offset ~/ chunk;
+      final b64 = await runCommand(
+          "dd if='${_shq(remotePath)}' bs=$chunk skip=$skip count=1 2>/dev/null | base64");
+      final clean = b64.replaceAll(RegExp(r'\s'), '');
+      if (clean.isEmpty) break;
+      final List<int> bytes;
+      try {
+        bytes = base64Decode(clean);
+      } catch (_) {
+        break;
+      }
+      if (bytes.isEmpty) break;
+      localSink.add(bytes);
+      offset += bytes.length;
+      onProgress?.call(offset, total);
+      if (bytes.length < chunk) break; // последний чанк
+    }
+    await localSink.flush();
+  }
+
+  /// Загрузить файл на накопитель через SFTP (быстро).
+  Future<void> uploadFileSftp({
+    required String remotePath,
+    required Uint8List data,
+    void Function(int done, int total)? onProgress,
+  }) async {
+    final sftp = await _client!.sftp();
+    try {
+      final f = await sftp.open(
+        remotePath,
+        mode: SftpFileOpenMode.write |
+            SftpFileOpenMode.create |
+            SftpFileOpenMode.truncate,
+      );
+      try {
+        const c = 64 * 1024;
+        for (var off = 0; off < data.length; off += c) {
+          final end = (off + c) > data.length ? data.length : off + c;
+          await f.writeBytes(Uint8List.sublistView(data, off, end), offset: off);
+          onProgress?.call(end, data.length);
+        }
+      } finally {
+        await f.close();
+      }
+    } finally {
+      await sftp.close();
+    }
+  }
+
+  /// Универсальный перенос: файл с накопителя -> iOSink на телефоне.
+  Future<void> downloadFile({
+    required String remotePath,
+    required IOSink localSink,
+    void Function(int done, int? total)? onProgress,
+  }) async {
+    if (await sftpAvailable()) {
+      await downloadFileSftp(
+        remotePath: remotePath,
+        destination: localSink,
+        onProgress: onProgress,
+      );
+    } else {
+      await downloadFileBase64(
+        remotePath: remotePath,
+        localSink: localSink,
+        onProgress: onProgress,
+      );
+    }
+  }
+
+  /// Переименовать / переместить файл или папку.
+  Future<void> renamePath(String oldPath, String newPath) async {
+    final r = await runCommand(
+        "mv '${_shq(oldPath)}' '${_shq(newPath)}' 2>&1 && echo OK || echo FAIL");
+    if (!r.trim().endsWith('OK')) {
+      throw Exception('Не удалось переименовать/переместить');
+    }
+  }
+
+  /// Создать папку.
+  Future<void> makeDir(String path) async {
+    final r = await runCommand("mkdir -p '${_shq(path)}' 2>&1 && echo OK || echo FAIL");
+    if (!r.trim().endsWith('OK')) throw Exception('Не удалось создать папку');
+  }
+
+  /// Удалить файл или пустую папку.
+  Future<void> removePath(String path, {bool directory = false}) async {
+    final r = await runCommand(
+        "${directory ? 'rmdir' : 'rm -rf'} '${_shq(path)}' 2>&1 && echo OK || echo FAIL");
+    if (!r.trim().endsWith('OK')) throw Exception('Не удалось удалить');
+  }
+
+  /// Данные диска/раздела (df).
+  Future<Map<String, String>> diskStats(String path) async {
+    try {
+      final raw = await runCommand("df -k '${_shq(path)}' 2>/dev/null | tail -1");
+      final p = raw.trim().split(RegExp(r'\s+'));
+      if (p.length >= 4) {
+        return {
+          'total': p[1],
+          'used': p[2],
+          'avail': p[3],
+          'use': p.length >= 5 ? p[4] : '-',
+        };
+      }
+    } catch (_) {}
+    return {};
+  }
+
+  /// Список доступных файловых систем для форматирования.
+  static const supportedFileSystems = <String, String>{
+    'vfat': 'FAT32 (vfat) — совместимо с Windows/TV',
+    'ext4': 'EXT4 — Linux',
+    'exfat': 'exFAT — большие файлы, совместимо с Windows',
+    'ntfs': 'NTFS — Windows (медленно на роутере)',
+    'btrfs': 'BTRFS — сжатие и снапшоты (Linux)',
+    'xfs': 'XFS — серверный (Linux)',
+  };
+
+  /// Форматировать раздел (разрушающая операция!). device: /dev/sda1.
+  Future<void> formatDevice(String device, String fstype) async {
+    final tool = switch (fstype) {
+      'vfat' => 'mkfs.vfat -F 32',
+      'ext4' => 'mkfs.ext4 -F',
+      'exfat' => 'mkfs.exfat',
+      'ntfs' => 'mkfs.ntfs -F',
+      'btrfs' => 'mkfs.btrfs -f',
+      'xfs' => 'mkfs.xfs -f',
+      _ => throw Exception('Поддерживаемая ФС не выбрана'),
+    };
+    // Сначала размонтируем, затем форматируем.
+    await runCommandLong("umount '${_shq(device)}' 2>/dev/null || true");
+    final out = await runCommandLong(
+        "command -v $tool 2>/dev/null >/dev/null && $tool '${_shq(device)}' 2>&1 | tail -3 && echo OK_ || echo TOOL_MISSING");
+    if (out.contains('TOOL_MISSING')) {
+      throw Exception('Пакет инструментов mkfs не установлен на роутере');
+    }
+    if (!out.contains('OK_')) {
+      throw Exception('Ошибка форматирования: ${out.trim()}');
+    }
   }
 
   Future<List<Map<String, String>>> fetchPortForwards() async {

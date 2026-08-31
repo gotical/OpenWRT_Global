@@ -1034,6 +1034,7 @@ class _SystemScreenState extends State<SystemScreen> {
               Navigator.of(context).push(MaterialPageRoute(builder: (_) => UsbBrowserScreen(
                 service: widget.service,
                 startPath: d['mount']!,
+                devicePath: (d['name'] ?? '').isEmpty ? null : '/dev/${d['name']}',
               )));
             })).toList()),
       )),
