@@ -6,6 +6,7 @@ import '../l10n/app_strings.dart';
 import '../models/system_info.dart';
 import '../services/error_handler.dart';
 import '../services/openwrt_service.dart';
+import '../widgets/app_skeleton.dart';
 import '../widgets/info_tile.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -183,7 +184,18 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
     final s = AppStrings.of(context);
     return RefreshIndicator(onRefresh: _load, child: CustomScrollView(physics: const BouncingScrollPhysics(), slivers: [
        SliverAppBar.large(title: Text(s.overview), actions: [IconButton(onPressed: _load, icon: const Icon(Icons.refresh))]),
-      if (loading) const SliverFillRemaining(child: Center(child: CircularProgressIndicator()))
+      if (loading)
+        SliverPadding(
+          padding: const EdgeInsets.all(16),
+          sliver: SliverList(
+            delegate: SliverChildListDelegate([
+              const AppCardSkeleton(),
+              const AppCardSkeleton(lines: 2),
+              const AppCardSkeleton(),
+              const AppCardSkeleton(lines: 2),
+            ]),
+          ),
+        )
       else if (error != null) _err(t)
       else if (info != null) SliverPadding(padding: const EdgeInsets.symmetric(horizontal: 16), sliver: SliverList(delegate: SliverChildListDelegate([
         _header(t), const SizedBox(height: 12),

@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../models/client_info.dart';
 import '../services/openwrt_service.dart';
 import '../services/storage_service.dart';
+import '../widgets/app_skeleton.dart';
 import 'client_detail_screen.dart';
 
 class ClientsScreen extends StatefulWidget {
@@ -409,7 +410,17 @@ class ClientsScreenState extends State<ClientsScreen> {
               ),
             ),
             if (loading)
-              const SliverFillRemaining(child: Center(child: CircularProgressIndicator()))
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                sliver: SliverList(
+                  delegate: SliverChildListDelegate([
+                    const AppCardSkeleton(lines: 2),
+                    const AppCardSkeleton(lines: 2),
+                    const AppCardSkeleton(lines: 2),
+                    const AppCardSkeleton(lines: 2),
+                  ]),
+                ),
+              )
             else if (error != null)
               SliverFillRemaining(
                 child: Center(
