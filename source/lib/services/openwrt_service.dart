@@ -1172,8 +1172,35 @@ uci commit firewall
     return runCommand('uci show dhcp 2>/dev/null | grep "dns" || echo ""');
   }
 
+  /// Пресеты DNS для быстрого выбора (РФ/СНГ + мировые + Yandex).
+  static const List<({String name, String desc, List<String> ips})> dnsPresets = [
+    (name: 'Yandex DNS', desc: 'Обычный — быстро и стабильно', ips: ['77.88.8.8', '77.88.8.1']),
+    (name: 'Yandex Безопасный', desc: 'Блокировка сайтов с вирусами и мошенничеством', ips: ['77.88.8.88', '77.88.8.2']),
+    (name: 'Yandex Семейный', desc: 'Родительский контроль (фильтр взрослых сайтов)', ips: ['77.88.8.7', '77.88.8.3']),
+    (name: 'Cloudflare', desc: '1.1.1.1 — быстрый и приватный', ips: ['1.1.1.1', '1.0.0.1']),
+    (name: 'Google Public DNS', desc: '8.8.8.8 — надёжный мировой', ips: ['8.8.8.8', '8.8.4.4']),
+    (name: 'AdGuard DNS', desc: 'Блокировка рекламы и трекеров', ips: ['94.140.14.14', '94.140.15.15']),
+    (name: 'Quad9', desc: '9.9.9.9 — блокировка вредоносных доменов', ips: ['9.9.9.9', '149.112.112.112']),
+    (name: 'DNS.SB', desc: 'Быстрый, без цензуры (ЕС/СНГ)', ips: ['185.222.222.222', '45.11.45.11']),
+    (name: 'SkyDNS (РФ)', desc: 'Российский общественный DNS', ips: ['193.58.251.251', '193.58.251.252']),
+    (name: 'OpenDNS', desc: 'Cisco — фильтрация контента, надёжный', ips: ['208.67.222.222', '208.67.220.220']),
+  ];
+
+  /// Очистить старые DNS-серверы dnsmasq (server=).
+  Future<void> clearDnsServers() async {
+    final raw = await runCommand('uci show dhcp 2>/dev/null | grep "=server" | grep "dnsmasq" || true');
+    for (final line in LineSplitter.split(raw)) {
+      final key = line.split('=').first.trim();
+      if (key.startsWith('dhcp.@dnsmasq[0].server')) {
+        await runCommand('uci delete $key');
+      }
+    }
+  }
+
+  /// Изменить DNS: очищаем старые и ставим новые.
   Future<void> setDns(List<String> servers) async {
     final esc = (String s) => s.replaceAll("'", "'\\''");
+    await clearDnsServers();
     for (final s in servers) {
       if (s.trim().isEmpty) continue;
       await runCommand("uci add_list dhcp.@dnsmasq[0].server='${esc(s.trim())}'");
@@ -1886,81 +1913,29 @@ echo "$stopM $stopH * * * nft delete element inet fw4 blocklist { $cleanMac } 2>
   Future<List<Map<String, String>>> fetchUsbDevices() async {
     final result = <Map<String, String>>[];
 
-    // 1. USB-накопители: lsblk -P (значения в кавычках — надёжный разбор пробелов)
-    try {
-      final raw = await runCommand(
-          'lsblk -P -o NAME,SIZE,MOUNTPOINT,LABEL,TRAN,TYPE,FSTYPE,ROTA 2>/dev/null || echo ""');
-      final rows = _parseLsblkPairs(raw);
-      final usbDisks = rows
-          .where((r) => r['TYPE'] == 'disk' && r['TRAN']?.toLowerCase() == 'usb')
-          .map((r) => r['NAME']!)
-          .toList();
-
-      // Модель/вендор дисков (значения могут содержать пробелы)
-      Map<String, Map<String, String>> models = {};
-      try {
-        final rawM = await runCommand('lsblk -P -dno NAME,MODEL,VENDOR 2>/dev/null || echo ""');
-        for (final r in _parseLsblkPairs(rawM)) {
-          models[r['NAME']!] = r;
-        }
-      } catch (_) {}
-
-      for (final row in rows) {
-        final name = row['NAME'] ?? '';
-        final isUsb = usbDisks.any((d) => name == d || name.startsWith('$d'));
-        if (!isUsb) continue;
-        final m = models[name] ?? {};
-        final isDisk = row['TYPE'] == 'disk';
-        final size = row['SIZE'] ?? '';
-        final fstype = row['FSTYPE'] ?? '';
-        final mount = row['MOUNTPOINT'] ?? '';
-        final label = row['LABEL'] ?? '';
-        final kind = isDisk
-            ? _detectDiskType('${m['VENDOR'] ?? ''} ${m['MODEL'] ?? ''}', row['ROTA'] ?? '0', size)
-            : 'раздел';
-        final browsable = mount.isNotEmpty && mount != '-';
-        String used = '', avail = '';
-        if (browsable) {
-          final d = await _dfUsage(mount);
-          used = d['used'] ?? '';
-          avail = d['avail'] ?? '';
-        }
-        result.add({
-          'name': name,
-          'dev': '/dev/$name',
-          'size': size,
-          'model': '${m['VENDOR'] ?? ''} ${m['MODEL'] ?? ''}'.trim(),
-          'type': kind,
-          'fstype': fstype,
-          'label': label,
-          'mount': mount.isEmpty ? '—' : mount,
-          'used': used,
-          'avail': avail,
-          'browsable': browsable ? '1' : '0',
-        });
-      }
-    } catch (_) {}
+    // 1. USB-накопители. Сначала lsblk, иначе резервный разбор /proc.
+    var detected = await _detectUsbViaLsblk();
+    if (detected.isEmpty) {
+      detected = await _detectUsbViaProc();
+    }
+    result.addAll(detected);
 
     // 2. Прочие USB-устройства (модемы, принтеры, адаптеры) через lsusb.
-    // Не добавляем дубликаты накопителей: если у нас уже есть раздел USB-диска,
-    // это тот же физический накопитель, а не отдельное «устройство».
+    // Не добавляем дубликаты накопителей.
     try {
       final raw = await runCommand('lsusb 2>/dev/null || echo ""');
       for (final line in LineSplitter.split(raw)) {
         final m = RegExp(r'Bus \d+ Device \d+:\s*\S+\s+(.+)').firstMatch(line);
         if (m != null && m.group(1)!.trim().isNotEmpty) {
           final name = m.group(1)!.trim();
-          // Уже есть раздел накопителя — пропускаем (это тот же USB-девайс).
           if (result.any((e) => e['name'] == name)) continue;
-          // Пропускаем то, что выглядит как накопитель/карта/адаптер, а не модем.
           final lower = name.toLowerCase();
           if (lower.contains('usb disk') || lower.contains('flash') ||
               lower.contains('storage') || lower.contains('cruzer') ||
               lower.contains('data traveler') || lower.contains('card reader') ||
-              lower.contains('card reader') || lower.contains('mass storage')) {
+              lower.contains('mass storage')) {
             continue;
           }
-          // Строго сотовые модемы. Ключевые слова, точно указывающие на модем.
           final isModem = [
             'modem', '4g lte', 'lte modem', 'wwan', 'cdc ', 'option', 'qmi',
             'cellular', 'ec20', 'simcom', 'meeg', 'rndis', 'uc20',
@@ -1975,6 +1950,188 @@ echo "$stopM $stopH * * * nft delete element inet fw4 blocklist { $cleanMac } 2>
     } catch (_) {}
 
     return result;
+  }
+
+  /// USB-накопители через lsblk -P (если установлен).
+  Future<List<Map<String, String>>> _detectUsbViaLsblk() async {
+    final result = <Map<String, String>>[];
+    try {
+      final raw = await runCommand(
+          'lsblk -P -o NAME,SIZE,MOUNTPOINT,LABEL,TRAN,TYPE,FSTYPE,ROTA 2>/dev/null || echo ""');
+      if (raw.trim().isEmpty) return result;
+      final rows = _parseLsblkPairs(raw);
+      final usbDisks = rows
+          .where((r) => r['TYPE'] == 'disk' && r['TRAN']?.toLowerCase() == 'usb')
+          .map((r) => r['NAME']!)
+          .toList();
+      if (usbDisks.isEmpty) return result;
+
+      Map<String, Map<String, String>> models = {};
+      try {
+        final rawM = await runCommand('lsblk -P -dno NAME,MODEL,VENDOR 2>/dev/null || echo ""');
+        for (final r in _parseLsblkPairs(rawM)) {
+          models[r['NAME']!] = r;
+        }
+      } catch (_) {}
+
+      for (final row in rows) {
+        final name = row['NAME'] ?? '';
+        final isUsb = usbDisks.any((d) => name == d || name.startsWith('$d'));
+        if (!isUsb) continue;
+        result.add(await _usbRow(row, models[name] ?? {}));
+      }
+    } catch (_) {}
+    return result;
+  }
+
+  /// USB-накопители резервно через /proc/partitions + /proc/mounts +
+  /// /sys/class/block — работает там, где нет lsblk (частое дело на OpenWrt).
+  Future<List<Map<String, String>>> _detectUsbViaProc() async {
+    final result = <Map<String, String>>[];
+    try {
+      // Точки монтирования: device -> (mount, fstype)
+      final mounts = <String, Map<String, String>>{};
+      try {
+        final mRaw = await runCommand('cat /proc/mounts 2>/dev/null || echo ""');
+        for (final line in LineSplitter.split(mRaw)) {
+          final p = line.trim().split(' ');
+          if (p.length >= 3) mounts[p[0]] = {'mount': p[1], 'fstype': p[2]};
+        }
+      } catch (_) {}
+
+      // USB-блочные устройства через /sys/class/block
+      final usbDevs = <String>[];
+      try {
+        final sys = await runCommand(
+            'for d in /sys/class/block/*; do n=\$(basename "\$d"); '
+            '[ -e "\$d/device" ] || continue; '
+            'p=\$(readlink -f "\$d/device" 2>/dev/null); '
+            'case "\$p" in *usb*) echo "\$n";; esac; '
+            'done; '
+            'for d in /sys/class/block/*; do n=\$(basename "\$d"); '
+            'r=\$(cat "\$d/removable" 2>/dev/null); [ "\$r" = "1" ] && echo "rm:\$n"; done');
+        for (final line in LineSplitter.split(sys)) {
+          final t = line.trim();
+          if (t.startsWith('rm:')) usbDevs.add(t.substring(3));
+          else if (t.isNotEmpty) usbDevs.add(t);
+        }
+      } catch (_) {}
+
+      if (usbDevs.isEmpty) return result;
+
+      // Размер из /proc/partitions: device, blocks (512 байт)
+      final sizes = <String, int>{};
+      try {
+        final pRaw = await runCommand('cat /proc/partitions 2>/dev/null || echo ""');
+        for (final line in LineSplitter.split(pRaw)) {
+          final p = line.trim().split(RegExp(r'\s+'));
+          if (p.length >= 4) sizes[p[3]] = (int.tryParse(p[2]) ?? 0) * 512;
+        }
+      } catch (_) {}
+
+      // Отображаем и сами диски, и их разделы.
+      final seenPartitions = <String>{};
+      for (final dev in usbDevs) {
+        final isDisk = !RegExp(r'\d+$').hasMatch(dev);
+        final sizeB = sizes[dev] ?? 0;
+        final sizeStr = _humanSize(sizeB);
+        final parts = usbDevs.where((d) => d != dev && d.startsWith(dev)).toList();
+
+        // Ряд для самого диска (если есть разделы — помечаем как накопитель).
+        final devPath = '/dev/$dev';
+        final mi = mounts[devPath];
+        final fstype = mi?['fstype'] ?? '';
+        final mount = mi?['mount'] ?? '';
+        if (isDisk || !parts.isEmpty) {
+          result.add({
+            'name': dev,
+            'dev': devPath,
+            'size': sizeStr,
+            'model': '',
+            'type': isDisk ? 'USB-накопитель' : 'накопитель',
+            'fstype': fstype,
+            'label': '',
+            'mount': mount.isEmpty ? '—' : mount,
+            'used': '',
+            'avail': '',
+            'browsable': '0',
+          });
+        }
+        // Ряды для разделов этого диска.
+        for (final partDev in parts) {
+          if (seenPartitions.contains(partDev)) continue;
+          seenPartitions.add(partDev);
+          final partPath = '/dev/$partDev';
+          final pm = mounts[partPath];
+          final ps = sizes[partDev] ?? 0;
+          final row = {
+            'name': partDev,
+            'dev': partPath,
+            'size': _humanSize(ps),
+            'model': '',
+            'type': 'раздел',
+            'fstype': pm?['fstype'] ?? '',
+            'label': '',
+            'mount': pm?['mount'] ?? '—',
+            'used': '',
+            'avail': '',
+            'browsable': (pm != null && pm['mount']!.isNotEmpty &&
+                pm['mount'] != '' && pm['mount'] != '/') ? '1' : '0',
+          };
+          if (pm != null && pm['mount']!.isNotEmpty) {
+            final d = await _dfUsage(pm['mount']!);
+            row['used'] = d['used'] ?? '';
+            row['avail'] = d['avail'] ?? '';
+          }
+          result.add(row);
+        }
+      }
+    } catch (_) {}
+    return result;
+  }
+
+  Future<Map<String, String>> _usbRow(Map<String, String> row, Map<String, String> m) async {
+    final name = row['NAME'] ?? '';
+    final isDisk = row['TYPE'] == 'disk';
+    final size = row['SIZE'] ?? '';
+    final fstype = row['FSTYPE'] ?? '';
+    final mount = row['MOUNTPOINT'] ?? '';
+    final label = row['LABEL'] ?? '';
+    final kind = isDisk
+        ? _detectDiskType('${m['VENDOR'] ?? ''} ${m['MODEL'] ?? ''}', row['ROTA'] ?? '0', size)
+        : 'раздел';
+    final browsable = mount.isNotEmpty && mount != '-' && mount != '';
+    String used = '', avail = '';
+    if (browsable) {
+      final d = await _dfUsage(mount);
+      used = d['used'] ?? '';
+      avail = d['avail'] ?? '';
+    }
+    return {
+      'name': name,
+      'dev': '/dev/$name',
+      'size': size,
+      'model': '${m['VENDOR'] ?? ''} ${m['MODEL'] ?? ''}'.trim(),
+      'type': kind,
+      'fstype': fstype,
+      'label': label,
+      'mount': mount.isEmpty || mount == '-' ? '—' : mount,
+      'used': used,
+      'avail': avail,
+      'browsable': browsable ? '1' : '0',
+    };
+  }
+
+  String _humanSize(int bytes) {
+    if (bytes <= 0) return '';
+    const u = ['B', 'KB', 'MB', 'GB', 'TB'];
+    var d = bytes.toDouble();
+    var i = 0;
+    while (d >= 1024 && i < u.length - 1) {
+      d /= 1024;
+      i++;
+    }
+    return '${d.toStringAsFixed(i == 0 ? 0 : 1)} ${u[i]}';
   }
 
   /// Подключить (смонтировать) USB-накопитель/раздел. Возвращает точку монтирования

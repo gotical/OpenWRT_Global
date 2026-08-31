@@ -680,6 +680,57 @@ class _SystemScreenState extends State<SystemScreen> {
              title: Text(_t('Настройка DNS')),
             content: SingleChildScrollView(
               child: Column(mainAxisSize: MainAxisSize.min, children: [
+                // Быстрый выбор DNS (пресеты РФ/СНГ и мировые).
+                DropdownButtonFormField<String>(
+                  initialValue: _dnsPresetSel,
+                  decoration: InputDecoration(
+                    labelText: _t('Быстрый выбор DNS'),
+                    prefixIcon: const Icon(Icons.bolt),
+                  ),
+                  items: [
+                    DropdownMenuItem(value: '', child: Text(_t('— свои (ввести вручную) —'))),
+                    for (final p in OpenWrtService.dnsPresets)
+                      DropdownMenuItem(value: p.name, child: Text(p.name)),
+                  ],
+                  onChanged: (v) {
+                    setSt(() => _dnsPresetSel = v ?? '');
+                    if (v != null && v!.isNotEmpty) {
+                      for (final p in OpenWrtService.dnsPresets) {
+                        if (p.name == v) {
+                          setSt(() {
+                            dnsType = 'default';
+                            dns1.text = p.ips.isNotEmpty ? p.ips[0] : '';
+                            dns2.text = p.ips.length > 1 ? p.ips[1] : '';
+                          });
+                          break;
+                        }
+                      }
+                    }
+                  },
+                ),
+                const SizedBox(height: 12),
+                // Пресеты — сразу применить.
+                if (_dnsPresetSel.isNotEmpty)
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.check),
+                      label: Text(_t('Применить пресет')),
+                      onPressed: () async {
+                        for (final p in OpenWrtService.dnsPresets) {
+                          if (p.name == _dnsPresetSel) {
+                            await widget.service.setDns(p.ips);
+                            if (mounted) {
+                              _snack('${_t('DNS обновлён')}: ${p.name}', ok: true);
+                              Navigator.pop(ctx);
+                            }
+                            return;
+                          }
+                        }
+                      },
+                    ),
+                  ),
+                const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
                   initialValue: dnsType,
                    decoration: InputDecoration(labelText: _t('Тип DNS')),
@@ -1345,7 +1396,10 @@ class _SystemScreenState extends State<SystemScreen> {
     );
   }
 
-  void _snack(String msg) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  String _dnsPresetSel = '';
+
+  void _snack(String msg, {bool ok = false}) => ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(msg), backgroundColor: ok ? Colors.green.shade700 : null));
 
   @override
   Widget build(BuildContext context) {
@@ -1624,8 +1678,8 @@ class _UsbTile extends StatelessWidget {
               : null,
       onTap: browsable
           ? onBrowse
-          : (isStorage && d['dev'] != null && onMount != null)
-              ? onMount
+          : isStorage
+              ? (onMount ?? onBrowse)
               : null,
     );
   }
