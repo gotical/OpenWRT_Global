@@ -1029,14 +1029,37 @@ class _SystemScreenState extends State<SystemScreen> {
       content: SizedBox(width: double.maxFinite, child: SingleChildScrollView(
         child: Column(mainAxisSize: MainAxisSize.min, children: devs.isEmpty
            ? [Padding(padding: const EdgeInsets.symmetric(vertical: 24), child: Text(_t('USB-устройств не найдено')))]
-          : devs.map((d) => _UsbTile(d: d, onBrowse: () {
-              Navigator.pop(ctx);
-              Navigator.of(context).push(MaterialPageRoute(builder: (_) => UsbBrowserScreen(
-                service: widget.service,
-                startPath: d['mount']!,
-                devicePath: (d['name'] ?? '').isEmpty ? null : '/dev/${d['name']}',
-              )));
-            })).toList()),
+          : devs.map((d) => _UsbTile(
+              d: d,
+              onBrowse: () {
+                Navigator.pop(ctx);
+                Navigator.of(context).push(MaterialPageRoute(builder: (_) => UsbBrowserScreen(
+                  service: widget.service,
+                  startPath: (d['mount'] ?? '—') == '—' ? '/' : d['mount']!,
+                  devicePath: (d['dev'] ?? '').isEmpty ? null : d['dev'],
+                )));
+              },
+              onMount: () async {
+                final dev = d['dev'] ?? '';
+                if (dev.isEmpty) return;
+                // Показываем индикатор и пробуем смонтировать.
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(_t('Подключение накопителя...'))));
+                final mount = await widget.service.mountUsbDevice(dev);
+                if (!mounted) return;
+                if (mount == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(_t('Не удалось подключить накопитель'))));
+                  return;
+                }
+                Navigator.of(context).push(MaterialPageRoute(builder: (_) => UsbBrowserScreen(
+                  service: widget.service,
+                  startPath: mount,
+                  devicePath: dev,
+                )));
+              },
+            )).toList()),
       )),
       actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
     ));
@@ -1056,25 +1079,97 @@ class _SystemScreenState extends State<SystemScreen> {
   }
 
   Future<void> _checkAdGuard() async {
-     _showProgress(_t('Проверка AdGuard...'));
-    final status = await widget.service.fetchAdGuardStatus();
+    _showProgress(_t('Проверка AdGuard...'));
+    final info = await widget.service.fetchAdGuardInfo();
     if (!mounted) return;
     Navigator.pop(context);
-    showDialog(context: context, builder: (ctx) => AlertDialog(
-       title: const Text('AdGuard Home'), content: Text(status == 'NOT_RUNNING' ? _t('Не запущен. Установите AdGuard Home.') : status == 'true' ? _t('Блокировка включена') : _t('Блокировка выключена')),
-      actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
-    ));
+    var enabled = info?['protection_enabled'] == true;
+    final s = AppStrings.of(context);
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSt) => AlertDialog(
+          title: Row(children: [const Icon(Icons.security), const SizedBox(width: 8), const Text('AdGuard Home')]),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (info == null)
+                Text(_t('Не запущен. Установите AdGuard Home.'))
+              else ...[
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(_t('Защита')),
+                  value: enabled,
+                  onChanged: (v) async {
+                    setSt(() => enabled = v);
+                    final ok = await widget.service.setAdGuardProtection(v);
+                    if (!ok) setSt(() => enabled = !v);
+                  },
+                ),
+                if (info['version'] != null)
+                  _InfoRow(_t('Версия'), info['version']!.toString()),
+                if (info['dns_queries'] != null)
+                  _InfoRow(_t('Запросов DNS'), info['dns_queries'].toString()),
+                if (info['blocked_queries'] != null)
+                  _InfoRow(_t('Заблокировано'), info['blocked_queries'].toString()),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: Text(_t('Закрыть'))),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _showDdnsStatus() async {
     _showProgress(_t('Проверка DDNS...'));
-    final status = await widget.service.fetchDdnsStatus();
+    var list = await widget.service.fetchDdnsStatus();
     if (!mounted) return;
     Navigator.pop(context);
-    showDialog(context: context, builder: (ctx) => AlertDialog(
-       title: const Text('DDNS'), content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: status.isEmpty ? [Text(_t('Не настроен'))] : status.map((s) => ListTile(title: Text(s['name']!), subtitle: Text(s['domain']!))).toList())),
-      actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
-    ));
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSt) => AlertDialog(
+          title: Row(children: [const Icon(Icons.language), const SizedBox(width: 8), const Text('DDNS')]),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: list.isEmpty
+                ? Text(_t('Не настроен'))
+                : SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: list.map((e) {
+                        final on = e['enabled'] != '0';
+                        return ListTile(
+                          title: Text(e['name']!),
+                          subtitle: Text('${e['domain']} • ${e['ip']}'),
+                          trailing: Switch(
+                            value: on,
+                            onChanged: (v) async {
+                              try {
+                                await widget.service.setDdnsEnabled(e['section']!, v);
+                                e['enabled'] = v ? '1' : '0';
+                                setSt(() {});
+                                _snack(v ? _t('DDNS включён') : _t('DDNS выключен'));
+                              } catch (err) {
+                                _snack('${_t('Ошибка')}: $err');
+                              }
+                            },
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: Text(_t('Закрыть'))),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _offerReboot() async {
@@ -1483,29 +1578,33 @@ class _ActionCard extends StatelessWidget {
 
 class _UsbTile extends StatelessWidget {
   final Map<String, String> d;
-  final VoidCallback onBrowse;
+  final VoidCallback onBrowse; // когда уже подключено
+  final VoidCallback? onMount; // подключить (размонтированный накопитель)
 
-  const _UsbTile({required this.d, required this.onBrowse});
+  const _UsbTile({required this.d, required this.onBrowse, this.onMount});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final type = d['type'] ?? '';
     final browsable = d['browsable'] == '1';
+    final isStorage = type.contains('флешка') || type.contains('SSD') ||
+        type.contains('HDD') || type.contains('накопитель') || type == 'раздел';
     final availKb = int.tryParse(d['avail'] ?? '');
     final usedKb = int.tryParse(d['used'] ?? '');
     final icon = type.contains('модем')
         ? Icons.network_cell
-        : type.contains('флешка') || type.contains('SSD') || type.contains('HDD')
+        : isStorage
             ? Icons.storage
             : Icons.usb;
     final parts = <String>[
       type,
       if (d['size'] != null && d['size']!.isNotEmpty && d['size'] != 'USB') d['size']!,
-       if (availKb != null) '${AppStrings.of(context).text('свободно')} ${NetworkInterface.formatBytes(availKb * 1024)}',
-       if (usedKb != null && usedKb > 0) '${AppStrings.of(context).text('занято')} ${NetworkInterface.formatBytes(usedKb * 1024)}',
+      if (availKb != null) '${AppStrings.of(context).text('свободно')} ${NetworkInterface.formatBytes(availKb * 1024)}',
+      if (usedKb != null && usedKb > 0) '${AppStrings.of(context).text('занято')} ${NetworkInterface.formatBytes(usedKb * 1024)}',
       if (d['fstype'] != null && d['fstype']!.isNotEmpty) d['fstype']!,
       if (d['mount'] != null && d['mount'] != '—') d['mount']!,
+      if (!browsable && isStorage && d['dev'] != null) AppStrings.of(context).text('не подключён'),
     ];
     final model = d['model'] ?? '';
     return ListTile(
@@ -1520,8 +1619,14 @@ class _UsbTile extends StatelessWidget {
           : [if (model.isNotEmpty) model, parts.join(' • ')].join(' • ')),
       trailing: browsable
           ? Icon(Icons.folder_open, color: theme.colorScheme.primary)
-          : null,
-      onTap: browsable ? onBrowse : null,
+          : (isStorage && d['dev'] != null)
+              ? Icon(Icons.link, color: theme.colorScheme.primary)
+              : null,
+      onTap: browsable
+          ? onBrowse
+          : (isStorage && d['dev'] != null && onMount != null)
+              ? onMount
+              : null,
     );
   }
 }

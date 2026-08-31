@@ -1835,6 +1835,7 @@ echo "$stopM $stopH * * * nft delete element inet fw4 blocklist { $cleanMac } 2>
             'name': (await runCommand('uci get ddns.$s.service_name 2>/dev/null || echo "-"')).trim(),
             'domain': (await runCommand('uci get ddns.$s.domain 2>/dev/null || echo "-"')).trim(),
             'ip': (await runCommand('uci get ddns.$s.ip_source 2>/dev/null || echo "web"')).trim(),
+            'enabled': (await runCommand('uci get ddns.$s.enabled 2>/dev/null || echo "1"')).trim(),
           });
         } catch (_) {}
       }
@@ -1842,11 +1843,43 @@ echo "$stopM $stopH * * * nft delete element inet fw4 blocklist { $cleanMac } 2>
     return result;
   }
 
-  Future<String> fetchAdGuardStatus() async {
+  /// Включить/выключить DDNS-сервис.
+  Future<void> setDdnsEnabled(String section, bool enabled) async {
+    await runCommand(
+        "uci set ddns.$section.enabled='${enabled ? '1' : '0'}'; uci commit ddns; "
+        "/etc/init.d/ddns restart 2>/dev/null || /etc/init.d/ddns reload 2>/dev/null || true");
+  }
+
+  /// Информация AdGuard Home: защита, версия, запросы и блокировки.
+  Future<Map<String, dynamic>?> fetchAdGuardInfo() async {
     try {
-      return await runCommand('curl -s http://127.0.0.1:3000/control/status 2>/dev/null | jsonfilter -e "@.protection_enabled" 2>/dev/null || echo "NOT_RUNNING"');
+      final raw = await runCommand(
+          'curl -s --max-time 5 http://127.0.0.1:3000/control/status 2>/dev/null || echo ""');
+      if (raw.trim().isEmpty || raw.startsWith('{"')) {
+        final m = RegExp(r'"protection_enabled":\s*(true|false)|"version":\s*"([^"]+)"|"dns_queries":\s*(\d+)|"blocked_queries":\s*(\d+)');
+        final out = <String, dynamic>{};
+        for (final mm in m.allMatches(raw)) {
+          if (mm.group(1) != null) out['protection_enabled'] = mm.group(1) == 'true';
+          if (mm.group(2) != null) out['version'] = mm.group(2);
+          if (mm.group(3) != null) out['dns_queries'] = int.tryParse(mm.group(3)!);
+          if (mm.group(4) != null) out['blocked_queries'] = int.tryParse(mm.group(4)!);
+        }
+        return out.isEmpty && raw.trim().isEmpty ? null : out;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Включить/выключить защиту AdGuard Home через его API.
+  Future<bool> setAdGuardProtection(bool enabled) async {
+    try {
+      final r = await runCommand(
+          "curl -s --max-time 5 -X POST -H 'Content-Type: application/json' "
+          "-d '{\"enabled\":${enabled ? 'true' : 'false'}}' "
+          "http://127.0.0.1:3000/control/protection 2>&1 || echo FAIL");
+      return !r.contains('FAIL');
     } catch (_) {
-      return 'NOT_RUNNING';
+      return false;
     }
   }
 
@@ -1894,6 +1927,7 @@ echo "$stopM $stopH * * * nft delete element inet fw4 blocklist { $cleanMac } 2>
         }
         result.add({
           'name': name,
+          'dev': '/dev/$name',
           'size': size,
           'model': '${m['VENDOR'] ?? ''} ${m['MODEL'] ?? ''}'.trim(),
           'type': kind,
@@ -1907,30 +1941,64 @@ echo "$stopM $stopH * * * nft delete element inet fw4 blocklist { $cleanMac } 2>
       }
     } catch (_) {}
 
-    // 2. Прочие USB-устройства (модемы, принтеры, адаптеры) через lsusb
+    // 2. Прочие USB-устройства (модемы, принтеры, адаптеры) через lsusb.
+    // Не добавляем дубликаты накопителей: если у нас уже есть раздел USB-диска,
+    // это тот же физический накопитель, а не отдельное «устройство».
     try {
       final raw = await runCommand('lsusb 2>/dev/null || echo ""');
       for (final line in LineSplitter.split(raw)) {
         final m = RegExp(r'Bus \d+ Device \d+:\s*\S+\s+(.+)').firstMatch(line);
         if (m != null && m.group(1)!.trim().isNotEmpty) {
           final name = m.group(1)!.trim();
-          if (!result.any((e) => e['name'] == name)) {
-            final lower = name.toLowerCase();
-            final isModem = [
-              'modem', '4g', 'lte', 'dongle', 'qualcomm', 'huawei', 'zte',
-              'cdc', 'option', 'broadband', 'fiber', 'wwan'
-            ].any(lower.contains);
-            result.add({
-              'name': name, 'size': 'USB', 'mount': '—',
-              'type': isModem ? 'USB-модем' : 'устройство',
-              'fstype': '', 'used': '', 'avail': '', 'browsable': '0',
-            });
+          // Уже есть раздел накопителя — пропускаем (это тот же USB-девайс).
+          if (result.any((e) => e['name'] == name)) continue;
+          // Пропускаем то, что выглядит как накопитель/карта/адаптер, а не модем.
+          final lower = name.toLowerCase();
+          if (lower.contains('usb disk') || lower.contains('flash') ||
+              lower.contains('storage') || lower.contains('cruzer') ||
+              lower.contains('data traveler') || lower.contains('card reader') ||
+              lower.contains('card reader') || lower.contains('mass storage')) {
+            continue;
           }
+          // Строго сотовые модемы. Ключевые слова, точно указывающие на модем.
+          final isModem = [
+            'modem', '4g lte', 'lte modem', 'wwan', 'cdc ', 'option', 'qmi',
+            'cellular', 'ec20', 'simcom', 'meeg', 'rndis', 'uc20',
+          ].any(lower.contains);
+          result.add({
+            'name': name, 'size': 'USB', 'mount': '—',
+            'type': isModem ? 'USB-модем' : 'устройство',
+            'fstype': '', 'used': '', 'avail': '', 'browsable': '0',
+          });
         }
       }
     } catch (_) {}
 
     return result;
+  }
+
+  /// Подключить (смонтировать) USB-накопитель/раздел. Возвращает точку монтирования
+  /// или null, если не удалось.
+  Future<String?> mountUsbDevice(String device) async {
+    try {
+      final base = device.replaceAll('/dev/', '').replaceAll('/', '_');
+      final mount = '/mnt/$base';
+      final r = await runCommand(
+          "mkdir -p '$mount' && mount '$device' '$mount' 2>/dev/null && echo OK || echo FAIL");
+      return r.trim().endsWith('OK') ? mount : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Размонтировать USB-накопитель/раздел.
+  Future<void> unmountUsbDevice(String device) async {
+    String mount = '';
+    try {
+      final m = await runCommand("cat /proc/mounts 2>/dev/null | grep '^$device ' | awk '{print \$2}' | head -1");
+      mount = m.trim();
+    } catch (_) {}
+    await runCommand("umount '$device' 2>/dev/null; if [ -n '$mount' ]; then umount '$mount' 2>/dev/null || true; fi");
   }
 
   List<Map<String, String>> _parseLsblkPairs(String raw) {
