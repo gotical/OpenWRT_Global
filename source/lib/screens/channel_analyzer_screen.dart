@@ -139,29 +139,40 @@ class _ChannelAnalyzerScreenState extends State<ChannelAnalyzerScreen> {
               children: [
                 Icon(Icons.wifi_tethering, color: theme.colorScheme.primary),
                 const SizedBox(width: 8),
-                Text(widget.deviceName, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                Expanded(
+                  child: Text(widget.deviceName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                ),
               ],
             ),
             const SizedBox(height: 12),
-            Row(
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
               children: [
                  _infoChip(theme, s.text('Диапазон'), a.band.toUpperCase()),
-                const SizedBox(width: 8),
                  _infoChip(theme, s.text('Текущий канал'), '${a.currentChannel}'),
-                const SizedBox(width: 8),
                  _infoChip(theme, s.text('Ширина'), a.currentHtMode),
               ],
             ),
             const SizedBox(height: 8),
-            Row(
+            Wrap(
+              spacing: 16,
+              runSpacing: 4,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                Icon(Icons.phone_android, size: 16, color: phoneCount > 0 ? Colors.green : Colors.grey),
-                const SizedBox(width: 4),
-                 Text('${s.text('Телефон:')} $phoneCount ${s.text('сетей')}', style: theme.textTheme.bodySmall),
-                const SizedBox(width: 16),
-                Icon(Icons.router, size: 16, color: routerCount > 0 ? Colors.green : Colors.grey),
-                const SizedBox(width: 4),
-                 Text('${s.text('Роутер:')} $routerCount ${s.text('сетей')}', style: theme.textTheme.bodySmall),
+                Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.phone_android, size: 16, color: phoneCount > 0 ? Colors.green : Colors.grey),
+                  const SizedBox(width: 4),
+                   Text('${s.text('Телефон:')} $phoneCount ${s.text('сетей')}', style: theme.textTheme.bodySmall),
+                ]),
+                Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.router, size: 16, color: routerCount > 0 ? Colors.green : Colors.grey),
+                  const SizedBox(width: 4),
+                   Text('${s.text('Роутер:')} $routerCount ${s.text('сетей')}', style: theme.textTheme.bodySmall),
+                ]),
               ],
             ),
           ],
@@ -288,7 +299,7 @@ class _ChannelAnalyzerScreenState extends State<ChannelAnalyzerScreen> {
                                     color: Colors.blue.withValues(alpha: (routerCount / maxBars).clamp(0.2, 1.0)),
                                     borderRadius: BorderRadius.circular(3),
                                   ),
-                                  width: (routerCount / maxBars).clamp(0.1, 1.0) * double.infinity,
+                                  width: double.infinity,
                                 ),
                               // Bar for phone
                               if (phoneCount > 0)
@@ -299,7 +310,7 @@ class _ChannelAnalyzerScreenState extends State<ChannelAnalyzerScreen> {
                                     color: Colors.orange.withValues(alpha: (phoneCount / maxBars).clamp(0.2, 1.0)),
                                     borderRadius: BorderRadius.circular(3),
                                   ),
-                                  width: (phoneCount / maxBars).clamp(0.1, 1.0) * double.infinity,
+                                  width: double.infinity,
                                 ),
                             ],
                           ),
@@ -526,8 +537,11 @@ class _ChannelAnalyzerScreenState extends State<ChannelAnalyzerScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                 Text(s.ssid.isNotEmpty ? s.ssid : '(${AppStrings.of(context).text('скрытая')})', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                 Text(s.ssid.isNotEmpty ? s.ssid : '(${AppStrings.of(context).text('скрытая')})',
+                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
                 Text('К${s.channel}$chRange • $widthLabel • ${s.bssid.length >= 8 ? s.bssid.substring(0, 8) : s.bssid}...',
+                    maxLines: 1, overflow: TextOverflow.ellipsis,
                     style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurfaceVariant)),
               ],
             ),

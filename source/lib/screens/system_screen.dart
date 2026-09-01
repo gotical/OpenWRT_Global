@@ -683,6 +683,7 @@ class _SystemScreenState extends State<SystemScreen> {
                 // Быстрый выбор DNS (пресеты РФ/СНГ и мировые).
                 DropdownButtonFormField<String>(
                   initialValue: _dnsPresetSel,
+                  isExpanded: true,
                   decoration: InputDecoration(
                     labelText: _t('Быстрый выбор DNS'),
                     prefixIcon: const Icon(Icons.bolt),
@@ -733,6 +734,7 @@ class _SystemScreenState extends State<SystemScreen> {
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
                   initialValue: dnsType,
+                  isExpanded: true,
                    decoration: InputDecoration(labelText: _t('Тип DNS')),
                  items: [
                      DropdownMenuItem(value: 'default', child: Text(_t('Обычный (UDP:53)'))),
