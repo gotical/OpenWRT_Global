@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../l10n/app_strings.dart';
 import '../models/network_info.dart';
+import '../models/wifi_info.dart';
 import '../services/openwrt_service.dart';
 import '../services/storage_service.dart';
 import '../services/backup_service.dart';
@@ -214,28 +215,44 @@ class _SystemScreenState extends State<SystemScreen> {
   }
 
   Future<void> _aiAnalyzeLogs(BuildContext ctx, List<String> logs) async {
-    await AiAnalysisService.init();
-    final key = await StorageService.loadApiKey(await StorageService.loadActiveAiProvider() ?? 'deepseek');
-    if (key == null || key.isEmpty) {
-       _snack('${_t('Настройте API-ключ в')} «${_t('AI-ассистент')}»');
+    String? key;
+    String logText;
+    try {
+      await AiAnalysisService.init();
+      key = await StorageService.loadApiKey(await StorageService.loadActiveAiProvider() ?? 'deepseek');
+      logText = logs.take(60).join('\n');
+    } catch (e) {
+      if (mounted) _snack('${_t('Ошибка')}: $e');
       return;
     }
-    final logText = logs.take(60).join('\n');
+    if (key == null || key.isEmpty) {
+      if (mounted) _snack('${_t('Настройте API-ключ в')} «${_t('AI-ассистент')}»');
+      return;
+    }
+    if (!ctx.mounted) return;
     await showDialog(
       context: ctx,
-       builder: (dctx) => AlertDialog(
-         content: Row(children: [const CircularProgressIndicator(), const SizedBox(width: 16), Text(_t('AI анализ логов...'))]),
+      builder: (dctx) => const AlertDialog(
+        content: SizedBox(height: 60, child: Row(mainAxisSize: MainAxisSize.min, children: [CircularProgressIndicator(), SizedBox(width: 16), Text('AI...')])),
       ),
     );
-    final result = await AiAnalysisService.analyzeLog(logText);
-    if (!mounted) return;
+    String? result;
+    try {
+      result = await AiAnalysisService.analyzeLog(logText);
+    } catch (e) {
+      if (ctx.mounted) Navigator.pop(ctx);
+      if (mounted) _snack('${_t('Ошибка AI')}: $e');
+      return;
+    }
+    if (!ctx.mounted) return;
     Navigator.pop(ctx);
+    if (!mounted) return;
     await showDialog(
       context: context,
       builder: (dctx) => AlertDialog(
-         title: Text(_t('AI анализ логов')),
-         content: SingleChildScrollView(child: Text(result ?? _t('Нет ответа от AI'), style: const TextStyle(fontSize: 13))),
-         actions: [TextButton(onPressed: () => Navigator.pop(dctx), child: Text(_t('Закрыть')))],
+        title: Text(_t('AI анализ логов')),
+        content: SingleChildScrollView(child: Text(result ?? _t('Нет ответа от AI'), style: const TextStyle(fontSize: 13))),
+        actions: [TextButton(onPressed: () => Navigator.pop(dctx), child: Text(_t('Закрыть')))],
       ),
     );
   }
@@ -285,9 +302,9 @@ class _SystemScreenState extends State<SystemScreen> {
                   setSt(() { running = true; output = null; });
                   try {
                     final res = await widget.service.runCommand(ctrl.text.trim());
-                    setSt(() { output = res; running = false; });
+                    if (ctx.mounted) setSt(() { output = res; running = false; });
                   } catch (e) {
-                     setSt(() { output = '${_t('Ошибка')}: $e'; running = false; });
+                    if (ctx.mounted) setSt(() { output = '${_t('Ошибка')}: $e'; running = false; });
                   }
                 },
                  child: Text(_t('Выполнить')),
@@ -695,7 +712,7 @@ class _SystemScreenState extends State<SystemScreen> {
                   ],
                   onChanged: (v) {
                     setSt(() => _dnsPresetSel = v ?? '');
-                    if (v != null && v!.isNotEmpty) {
+                    if (v != null && v.isNotEmpty) {
                       for (final p in OpenWrtService.dnsPresets) {
                         if (p.name == v) {
                           setSt(() {
@@ -720,10 +737,14 @@ class _SystemScreenState extends State<SystemScreen> {
                       onPressed: () async {
                         for (final p in OpenWrtService.dnsPresets) {
                           if (p.name == _dnsPresetSel) {
-                            await widget.service.setDns(p.ips);
-                            if (mounted) {
-                              _snack('${_t('DNS обновлён')}: ${p.name}', ok: true);
-                              Navigator.pop(ctx);
+                            try {
+                              await widget.service.setDns(p.ips);
+                              if (mounted) {
+                                _snack('${_t('DNS обновлён')}: ${p.name}', ok: true);
+                                Navigator.pop(ctx);
+                              }
+                            } catch (e) {
+                              if (mounted) _snack('${_t('Ошибка')}: $e');
                             }
                             return;
                           }
@@ -805,7 +826,7 @@ class _SystemScreenState extends State<SystemScreen> {
            title: Text(_t('Удалённый доступ')),
           content: SingleChildScrollView(
             child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-               Row(children: [Text(_t('WAN IP:')), const SizedBox(width: 8), SelectableText(wanIp, style: const TextStyle(fontWeight: FontWeight.w700))]),
+               Row(children: [Text(_t('WAN IP:')), const SizedBox(width: 8), Expanded(child: SelectableText(wanIp, maxLines: 1, style: const TextStyle(fontWeight: FontWeight.w700)))]),
               const SizedBox(height: 12),
               if (srcPort != null && srcPort.isNotEmpty && enabled) ...[
                 Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: Colors.green.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
@@ -816,13 +837,13 @@ class _SystemScreenState extends State<SystemScreen> {
                     const SizedBox(height: 8),
                      Text('${_t('В приложении: добавьте роутер')}\n${_t('с IP')} $wanIp ${_t('и портом')} $srcPort'),
                   ])),
-                 OutlinedButton.icon(onPressed: () async { Navigator.pop(ctx); await widget.service.disableRemoteAccess(); if (mounted) _snack(_t('Удалённый доступ закрыт')); }, icon: const Icon(Icons.lock), label: Text(_t('Закрыть доступ'))),
+                 OutlinedButton.icon(onPressed: () async { Navigator.pop(ctx); try { await widget.service.disableRemoteAccess(); if (mounted) _snack(_t('Удалённый доступ закрыт')); } catch (e) { if (mounted) _snack('${_t('Ошибка')}: $e'); } }, icon: const Icon(Icons.lock), label: Text(_t('Закрыть доступ'))),
               ] else ...[
                  Text(_t('Доступ закрыт. Открыть порт для SSH?'), style: const TextStyle(fontWeight: FontWeight.w600)),
                 const SizedBox(height: 8),
                  Text(_t('Будет создан проброс порта 22022 → 22.\nИспользуйте сложный пароль root!'), style: const TextStyle(fontSize: 12)),
                 const SizedBox(height: 8),
-                 FilledButton.icon(onPressed: () async { Navigator.pop(ctx); await widget.service.enableRemoteAccess(); if (mounted) _snack(_t('Доступ открыт на порт 22022')); }, icon: const Icon(Icons.lock_open), label: Text(_t('Открыть доступ (порт 22022)'))),
+                 FilledButton.icon(onPressed: () async { Navigator.pop(ctx); try { await widget.service.enableRemoteAccess(); if (mounted) _snack(_t('Доступ открыт на порт 22022')); } catch (e) { if (mounted) _snack('${_t('Ошибка')}: $e'); } }, icon: const Icon(Icons.lock_open), label: Text(_t('Открыть доступ (порт 22022)'))),
               ],
             ]),
           ),
@@ -907,16 +928,20 @@ class _SystemScreenState extends State<SystemScreen> {
                                   icon: Icon(enabled ? Icons.toggle_on : Icons.toggle_off, color: enabled ? Colors.green : Colors.grey),
                                    tooltip: enabled ? _t('Отключить') : _t('Включить'),
                                   onPressed: () async {
-                                    await widget.service.updatePortForward(
-                                      section: r['section']!,
-                                      name: r['name'] ?? '-',
-                                      srcDport: r['dport'] ?? '-',
-                                      destIp: r['ip'] ?? '-',
-                                      destPort: r['dp'] ?? '-',
-                                      proto: r['proto'] ?? 'tcp',
-                                      enabled: !enabled,
-                                    );
-                                    if (mounted) { Navigator.pop(ctx); _showPortForwards(); }
+                                    try {
+                                      await widget.service.updatePortForward(
+                                        section: r['section']!,
+                                        name: r['name'] ?? '-',
+                                        srcDport: r['dport'] ?? '-',
+                                        destIp: r['ip'] ?? '-',
+                                        destPort: r['dp'] ?? '-',
+                                        proto: r['proto'] ?? 'tcp',
+                                        enabled: !enabled,
+                                      );
+                                      if (mounted) { Navigator.pop(ctx); _showPortForwards(); }
+                                    } catch (e) {
+                                      if (mounted) _snack('${_t('Ошибка')}: $e');
+                                    }
                                   },
                                 ),
                                  IconButton(icon: const Icon(Icons.edit, size: 20), tooltip: _t('Редактировать'),
@@ -935,8 +960,12 @@ class _SystemScreenState extends State<SystemScreen> {
                                       ),
                                     );
                                     if (ok != true) return;
-                                    await widget.service.deletePortForward(r['section']!);
-                                    if (mounted) { Navigator.pop(ctx); _showPortForwards(); }
+                                    try {
+                                      await widget.service.deletePortForward(r['section']!);
+                                      if (mounted) { Navigator.pop(ctx); _showPortForwards(); }
+                                    } catch (e) {
+                                      if (mounted) _snack('${_t('Ошибка')}: $e');
+                                    }
                                   }),
                               ]),
                             ),
@@ -954,29 +983,37 @@ class _SystemScreenState extends State<SystemScreen> {
   Future<void> _addPortForward() async {
     final values = await _portForwardDialog(null);
     if (values == null) return;
-    await widget.service.addPortForward(
-      name: values['name']!,
-      srcDport: values['dport']!,
-      destIp: values['ip']!,
-      destPort: values['dp']!,
-      proto: values['proto']!,
-    );
-     if (mounted) _snack(_t('Правило добавлено'));
+    try {
+      await widget.service.addPortForward(
+        name: values['name']!,
+        srcDport: values['dport']!,
+        destIp: values['ip']!,
+        destPort: values['dp']!,
+        proto: values['proto']!,
+      );
+      if (mounted) _snack(_t('Правило добавлено'));
+    } catch (e) {
+      if (mounted) _snack('${_t('Ошибка')}: $e');
+    }
   }
 
   Future<void> _editPortForward(Map<String, String> rule) async {
     final values = await _portForwardDialog(rule);
     if (values == null) return;
-    await widget.service.updatePortForward(
-      section: rule['section']!,
-      name: values['name']!,
-      srcDport: values['dport']!,
-      destIp: values['ip']!,
-      destPort: values['dp']!,
-      proto: values['proto']!,
-      enabled: values['enabled'] == '1',
-    );
-     if (mounted) _snack(_t('Правило обновлено'));
+    try {
+      await widget.service.updatePortForward(
+        section: rule['section']!,
+        name: values['name']!,
+        srcDport: values['dport']!,
+        destIp: values['ip']!,
+        destPort: values['dp']!,
+        proto: values['proto']!,
+        enabled: values['enabled'] == '1',
+      );
+      if (mounted) _snack(_t('Правило обновлено'));
+    } catch (e) {
+      if (mounted) _snack('${_t('Ошибка')}: $e');
+    }
   }
 
   Future<Map<String, String>?> _portForwardDialog(Map<String, String>? existing) async {
@@ -1042,13 +1079,23 @@ class _SystemScreenState extends State<SystemScreen> {
        TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(_t('Отмена'))), FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(_t('Разбудить'))),
     ]));
     if (ok == true && ctrl.text.isNotEmpty) {
-      await widget.service.wakeOnLan(ctrl.text);
-       if (mounted) _snack(_t('Magic packet отправлен'));
+      try {
+        await widget.service.wakeOnLan(ctrl.text);
+        if (mounted) _snack(_t('Magic packet отправлен'));
+      } catch (e) {
+        if (mounted) _snack('${_t('Ошибка')}: $e');
+      }
     }
   }
 
   Future<void> _showWifiSchedule() async {
-    final nets = await widget.service.fetchWifiNetworks();
+    List<WifiNetwork> nets;
+    try {
+      nets = await widget.service.fetchWifiNetworks();
+    } catch (e) {
+      if (mounted) _snack('${_t('Ошибка')}: $e');
+      return;
+    }
     if (nets.isEmpty) { _snack(_t('Wi-Fi сети не найдены')); return; }
     String? section;
     await showDialog(context: context, builder: (ctx) => AlertDialog(
@@ -1060,21 +1107,35 @@ class _SystemScreenState extends State<SystemScreen> {
     if (s == null || !mounted) return;
     final t = await showTimePicker(context: context, initialTime: stop);
     if (t == null || !mounted) return;
-    await widget.service.scheduleWifi(section!, start: '${s.hour.toString().padLeft(2, '0')}:${s.minute.toString().padLeft(2, '0')}', stop: '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}');
-     if (mounted) _snack(_t('Расписание сохранено'));
+    try {
+      await widget.service.scheduleWifi(section!, start: '${s.hour.toString().padLeft(2, '0')}:${s.minute.toString().padLeft(2, '0')}', stop: '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}');
+      if (mounted) _snack(_t('Расписание сохранено'));
+    } catch (e) {
+      if (mounted) _snack('${_t('Ошибка')}: $e');
+    }
   }
 
   Future<void> _checkTemperature() async {
     _showProgress(_t('Проверка...'));
-    final t = await widget.service.fetchTemperature();
-    if (!mounted) return;
-    Navigator.pop(context);
-    showDialog(context: context, builder: (ctx) => AlertDialog(title: Text(_t('Температура')), content: Text(t), actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))]));
+    try {
+      final t = await widget.service.fetchTemperature();
+      if (!mounted) return;
+      Navigator.pop(context);
+      showDialog(context: context, builder: (ctx) => AlertDialog(title: Text(_t('Температура')), content: Text(t), actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))]));
+    } catch (e) {
+      if (mounted) { Navigator.pop(context); _snack('${_t('Ошибка')}: $e'); }
+    }
   }
 
   Future<void> _showUsbDevices() async {
     _showProgress(_t('Сканирование...'));
-    final devs = await widget.service.fetchUsbDevices();
+    List<Map<String, String>> devs;
+    try {
+      devs = await widget.service.fetchUsbDevices();
+    } catch (e) {
+      if (mounted) { Navigator.pop(context); _snack('${_t('Ошибка')}: $e'); }
+      return;
+    }
     if (!mounted) return;
     Navigator.pop(context);
     showDialog(context: context, builder: (ctx) => AlertDialog(
@@ -1099,7 +1160,13 @@ class _SystemScreenState extends State<SystemScreen> {
                 Navigator.pop(ctx);
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text(_t('Подключение накопителя...'))));
-                final mount = await widget.service.mountUsbDevice(dev);
+                String? mount;
+                try {
+                  mount = await widget.service.mountUsbDevice(dev);
+                } catch (e) {
+                  if (mounted) _snack('${_t('Ошибка')}: $e');
+                  return;
+                }
                 if (!mounted) return;
                 if (mount == null) {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -1108,7 +1175,7 @@ class _SystemScreenState extends State<SystemScreen> {
                 }
                 Navigator.of(context).push(MaterialPageRoute(builder: (_) => UsbBrowserScreen(
                   service: widget.service,
-                  startPath: mount,
+                  startPath: mount!,
                   devicePath: dev,
                 )));
               },
@@ -1133,11 +1200,16 @@ class _SystemScreenState extends State<SystemScreen> {
 
   Future<void> _checkAdGuard() async {
     _showProgress(_t('Проверка AdGuard...'));
-    final info = await widget.service.fetchAdGuardInfo();
+    Map<String, dynamic>? info;
+    try {
+      info = await widget.service.fetchAdGuardInfo();
+    } catch (e) {
+      if (mounted) { Navigator.pop(context); _snack('${_t('Ошибка')}: $e'); }
+      return;
+    }
     if (!mounted) return;
     Navigator.pop(context);
     var enabled = info?['protection_enabled'] == true;
-    final s = AppStrings.of(context);
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -1156,8 +1228,13 @@ class _SystemScreenState extends State<SystemScreen> {
                   value: enabled,
                   onChanged: (v) async {
                     setSt(() => enabled = v);
-                    final ok = await widget.service.setAdGuardProtection(v);
-                    if (!ok) setSt(() => enabled = !v);
+                    try {
+                      final ok = await widget.service.setAdGuardProtection(v);
+                      if (!ok && ctx.mounted) setSt(() => enabled = !v);
+                    } catch (e) {
+                      if (ctx.mounted) setSt(() => enabled = !v);
+                      if (mounted) _snack('${_t('Ошибка')}: $e');
+                    }
                   },
                 ),
                 if (info['version'] != null)
@@ -1179,7 +1256,13 @@ class _SystemScreenState extends State<SystemScreen> {
 
   Future<void> _showDdnsStatus() async {
     _showProgress(_t('Проверка DDNS...'));
-    var list = await widget.service.fetchDdnsStatus();
+    List<Map<String, String>> list;
+    try {
+      list = await widget.service.fetchDdnsStatus();
+    } catch (e) {
+      if (mounted) { Navigator.pop(context); _snack('${_t('Ошибка')}: $e'); }
+      return;
+    }
     if (!mounted) return;
     Navigator.pop(context);
     showDialog(
@@ -1205,10 +1288,10 @@ class _SystemScreenState extends State<SystemScreen> {
                               try {
                                 await widget.service.setDdnsEnabled(e['section']!, v);
                                 e['enabled'] = v ? '1' : '0';
-                                setSt(() {});
+                                if (ctx.mounted) setSt(() {});
                                 _snack(v ? _t('DDNS включён') : _t('DDNS выключен'));
                               } catch (err) {
-                                _snack('${_t('Ошибка')}: $err');
+                                if (mounted) _snack('${_t('Ошибка')}: $err');
                               }
                             },
                           ),
@@ -1238,8 +1321,12 @@ class _SystemScreenState extends State<SystemScreen> {
       ),
     );
     if (ok == true) {
-      await widget.service.reboot();
-       if (mounted) _snack(_t('Команда перезагрузки отправлена'));
+      try {
+        await widget.service.reboot();
+        if (mounted) _snack(_t('Команда перезагрузки отправлена'));
+      } catch (e) {
+        if (mounted) _snack('${_t('Ошибка')}: $e');
+      }
     }
   }
 
@@ -1345,7 +1432,7 @@ class _SystemScreenState extends State<SystemScreen> {
               ]),
             ),
             actions: [
-               TextButton(onPressed: () => Navigator.pop(ctx), child: Text(_t('Закрыть'))),
+               TextButton(onPressed: installing ? null : () => Navigator.pop(ctx), child: Text(_t('Закрыть'))),
               if (missingCount > 0)
                 FilledButton(
                   onPressed: installing ? null : () async {
@@ -1353,28 +1440,29 @@ class _SystemScreenState extends State<SystemScreen> {
                     total = toInstall.length; done = 0;
                     setSt(() => installing = true);
                     for (final e in toInstall) {
+                      if (!ctx.mounted) return;
                       final primary = OpenWrtService.packageForDependency[e.key];
                       if (primary == null) continue;
                        setSt(() { status[e.key] = 'downloading'; msg = '${_t('Загрузка')} $primary...'; });
                       try {
                         await widget.service.installPackages([primary]);
-                         setSt(() { status[e.key] = 'done'; done++; msg = '${_t('Готово')} $primary'; });
+                         if (ctx.mounted) setSt(() { status[e.key] = 'done'; done++; msg = '${_t('Готово')} $primary'; });
                       } catch (_) {
                         try {
                           final alt = await widget.service.findAlternativePackage(e.key);
                           if (alt != null && alt != primary) {
                             await widget.service.installPackages([alt]);
-                             setSt(() { status[e.key] = 'done'; done++; msg = '${_t('Готово')} $alt (${_t('альтернатива')})'; });
+                             if (ctx.mounted) setSt(() { status[e.key] = 'done'; done++; msg = '${_t('Готово')} $alt (${_t('альтернатива')})'; });
                           } else {
                             rethrow;
                           }
                         } catch (_) {
-                           setSt(() { status[e.key] = 'error'; done++; msg = '${_t('Ошибка')} $primary'; });
+                           if (ctx.mounted) setSt(() { status[e.key] = 'error'; done++; msg = '${_t('Ошибка')} $primary'; });
                         }
                       }
                       await Future.delayed(const Duration(milliseconds: 400));
                     }
-                     setSt(() { installing = false; msg = '${_t('Установлено')} $done/${total}'; });
+                     if (ctx.mounted) setSt(() { installing = false; msg = '${_t('Установлено')} $done/${total}'; });
                     await StorageService.markDepsChecked(widget.service.config.host);
                     await Future.delayed(const Duration(seconds: 1));
                     _offerReboot();

@@ -36,7 +36,6 @@ class ChannelScanResult {
   List<int> get occupiedChannels {
     if (width <= 20) return [channel];
     final channels = <int>[];
-    final step = channel <= 14 ? 1 : 4;
     if (channel <= 14) {
       final half = (width ~/ 20) ~/ 2;
       for (int c = channel - half; c <= channel + half; c++) {
@@ -62,6 +61,8 @@ class ChannelAnalysis {
   final List<ChannelScanResult> routerScans;
   final Map<int, int> routerInterference; // channel -> network count
   final List<int> recommendedChannels;
+  final String routerError;
+  final String phoneMessage;
 
   ChannelAnalysis({
     required this.deviceName,
@@ -72,6 +73,8 @@ class ChannelAnalysis {
     this.routerScans = const [],
     this.routerInterference = const {},
     this.recommendedChannels = const [],
+    this.routerError = '',
+    this.phoneMessage = '',
   });
 
   List<int> get allChannels {

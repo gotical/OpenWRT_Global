@@ -101,14 +101,17 @@ class _UsbBrowserScreenState extends State<UsbBrowserScreen> {
   String _full(String name) => _path.endsWith('/') ? '$_path$name' : '$_path/$name';
 
   Future<void> _download(Map<String, String> entry) async {
+    if (_busy['op'] == true) return;
+    _busy['op'] = true;
     final s = AppStrings.of(context);
-    if (entry['isDir'] == '1') return;
+    if (entry['isDir'] == '1') { _busy['op'] = false; return; }
     Directory? dir;
     try {
       dir = await getExternalStorageDirectory();
     } catch (_) {}
     if (dir == null) {
       _snack(s.text('Не удалось получить каталог для сохранения'));
+      _busy['op'] = false;
       return;
     }
     final base = dir.path;
@@ -139,19 +142,18 @@ class _UsbBrowserScreenState extends State<UsbBrowserScreen> {
       Navigator.of(context, rootNavigator: true).pop();
       _snack('${s.text('Сохранено:')} $dest', ok: true);
     } catch (e) {
-      try {
-        await sink.flush();
-      } catch (_) {}
-      try {
-        await sink.close();
-      } catch (_) {}
+      try { await sink.flush(); } catch (_) {}
+      try { await sink.close(); } catch (_) {}
       if (!mounted) return;
       Navigator.of(context, rootNavigator: true).pop();
       _snack('${s.text('Ошибка')}: $e');
+    } finally {
+      _busy['op'] = false;
     }
   }
 
   Future<void> _upload() async {
+    if (_busy['op'] == true) return;
     final s = AppStrings.of(context);
     final result = await FilePicker.platform.pickFiles();
     if (result == null || result.files.isEmpty) return;
@@ -166,11 +168,19 @@ class _UsbBrowserScreenState extends State<UsbBrowserScreen> {
     final bytes = await file.readAsBytes();
     if (!mounted) return;
 
-    if (!await widget.service.sftpAvailable()) {
-      _snack(s.text('Для загрузки нужен openssh-sftp-server на роутере'));
+    bool sftpOk;
+    try {
+      sftpOk = await widget.service.sftpAvailable();
+    } catch (e) {
+      if (mounted) _snack('${s.text('Ошибка')}: $e');
+      return;
+    }
+    if (!sftpOk) {
+      if (mounted) _snack(s.text('Для загрузки нужен openssh-sftp-server на роутере'));
       return;
     }
 
+    _busy['op'] = true;
     final dlgKey = GlobalKey<_ProgressDialogState>();
     final dlg = _ProgressDialog(key: dlgKey, title: s.text('Загрузка'), label: f.name, total: size);
     showDialog<void>(context: context, barrierDismissible: false, builder: (_) => dlg);
@@ -188,6 +198,8 @@ class _UsbBrowserScreenState extends State<UsbBrowserScreen> {
       if (!mounted) return;
       Navigator.of(context, rootNavigator: true).pop();
       _snack('${s.text('Ошибка')}: $e');
+    } finally {
+      _busy['op'] = false;
     }
   }
 

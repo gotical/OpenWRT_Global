@@ -54,8 +54,9 @@ class _MonitorScreenState extends State<MonitorScreen> {
         for (final p in parts) { if (p.startsWith('src=')) src = p.substring(4); if (p.startsWith('dst=')) dst = p.substring(4); if (p.startsWith('sport=')) sport = p.substring(6); if (p.startsWith('dport=')) dport = p.substring(6); }
         if (src != null && dst != null && !src.startsWith('127.') && !dst.startsWith('127.')) list.add({'proto': proto, 'state': state, 'src': src, 'dst': dst, 'sport': sport ?? '-', 'dport': dport ?? '-'});
       }
+      if (!mounted) return;
       setState(() { connections = list; _filter(); loading = false; });
-    } catch (_) { setState(() => loading = false); }
+    } catch (_) { if (mounted) setState(() => loading = false); }
   }
 
   List<Widget> _groupSection(String key, List<Map<String, String>> list, ThemeData t) => [

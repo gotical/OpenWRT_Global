@@ -5,6 +5,7 @@ import '../models/client_info.dart';
 import '../services/openwrt_service.dart';
 import '../services/storage_service.dart';
 import '../widgets/app_skeleton.dart';
+import '../widgets/empty_state.dart';
 import 'client_detail_screen.dart';
 
 class ClientsScreen extends StatefulWidget {
@@ -42,6 +43,7 @@ class ClientsScreenState extends State<ClientsScreen> {
       final blocked = await widget.service.fetchBlockedMacs();
       final lim = await StorageService.loadTrafficLimits();
       final names = await StorageService.loadDeviceNames();
+      if (!mounted) return;
       setState(() {
         allClients = data;
         blockedMacs = blocked.map((m) => m.toLowerCase()).toList();
@@ -52,6 +54,7 @@ class ClientsScreenState extends State<ClientsScreen> {
         error = null;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         error = e.toString();
         loading = false;
@@ -95,7 +98,7 @@ class ClientsScreenState extends State<ClientsScreen> {
         await widget.service.blockClient(c.mac);
         blockedMacs.add(c.mac);
       }
-      setState(() {});
+      if (mounted) setState(() {});
     } catch (e) {
       if (mounted) _snack('$e');
     }
@@ -176,12 +179,22 @@ class ClientsScreenState extends State<ClientsScreen> {
       ),
     );
     if (kbps == null) return;
-    await widget.service.applySpeedLimit(c.mac, kbps);
-    if (mounted) _snack(kbps == 0 ? _t('Снято') : '${_t('Скорость')}: $kbps ${_t('КБ/с')}');
+    try {
+      await widget.service.applySpeedLimit(c.mac, kbps);
+      if (mounted) _snack(kbps == 0 ? _t('Снято') : '${_t('Скорость')}: $kbps ${_t('КБ/с')}');
+    } catch (e) {
+      if (mounted) _snack('${_t('Ошибка')}: $e');
+    }
   }
 
   Future<void> _setStaticIp(ClientInfo c) async {
-    final leases = await widget.service.fetchStaticLeases();
+    List<Map<String, String>> leases;
+    try {
+      leases = await widget.service.fetchStaticLeases();
+    } catch (e) {
+      if (mounted) _snack('${_t('Ошибка')}: $e');
+      return;
+    }
     final ex = leases.where((e) => e['mac'] == c.mac).firstOrNull;
     final ipCtrl = TextEditingController(text: ex?['ip'] ?? c.ip ?? '192.168.1.100');
     final nameCtrl = TextEditingController(text: ex?['name'] ?? c.hostname);
@@ -213,13 +226,17 @@ class ClientsScreenState extends State<ClientsScreen> {
       ),
     );
     if (act == null) return;
-    if (act == 'delete') {
-      await widget.service.removeStaticLease(c.mac);
-    } else {
-      await widget.service.setStaticLease(mac: c.mac, ip: ipCtrl.text, hostname: nameCtrl.text);
+    try {
+      if (act == 'delete') {
+        await widget.service.removeStaticLease(c.mac);
+      } else {
+        await widget.service.setStaticLease(mac: c.mac, ip: ipCtrl.text, hostname: nameCtrl.text);
+      }
+      if (mounted) _snack(_t('Готово'));
+      await _load();
+    } catch (e) {
+      if (mounted) _snack('${_t('Ошибка')}: $e');
     }
-    if (mounted) _snack(_t('Готово'));
-    await _load();
   }
 
   Future<void> _renameClient(ClientInfo c) async {
@@ -260,18 +277,22 @@ class ClientsScreenState extends State<ClientsScreen> {
     if (c.mac.length < 8) return; // защита от некорректных MAC
     final prefix = c.mac.substring(0, 8);
     if (vendorCache.containsKey(prefix)) return;
-    final v = await widget.service.fetchMacVendor(c.mac);
-    setState(() => vendorCache[prefix] = v);
+    try {
+      final v = await widget.service.fetchMacVendor(c.mac);
+      if (mounted) setState(() => vendorCache[prefix] = v);
+    } catch (_) {}
   }
 
   Future<void> _classify(ClientInfo c) async {
     if (deviceTypes.containsKey(c.mac)) return;
-    final t = await widget.service.classifyDevice(
-      mac: c.mac,
-      hostname: _displayName(c),
-      ip: c.ip,
-    );
-    setState(() => deviceTypes[c.mac] = t);
+    try {
+      final t = await widget.service.classifyDevice(
+        mac: c.mac,
+        hostname: _displayName(c),
+        ip: c.ip,
+      );
+      if (mounted) setState(() => deviceTypes[c.mac] = t);
+    } catch (_) {}
   }
 
   IconData _typeIcon(String? type) {
@@ -438,7 +459,17 @@ class ClientsScreenState extends State<ClientsScreen> {
                 ),
               )
             else if (filtered.isEmpty)
-              SliverFillRemaining(child: Center(child: Text(_t('Клиенты не найдены'))))
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: EmptyState(
+                  asset: 'assets/empty_states/no_clients.png',
+                  title: _t('Клиенты не найдены'),
+                  message: _t('Проверьте, что устройства подключены к сети'),
+                  icon: Icons.refresh,
+                  actionLabel: _t('Обновить'),
+                  onAction: _load,
+                ),
+              )
             else if (!treeView)
               SliverPadding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),

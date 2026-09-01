@@ -42,12 +42,13 @@ class _NetworkScreenState extends State<NetworkScreen> {
           if (line.contains('Access Point')) staDev = line.split(':').last.trim();
         }
       } catch (_) {}
+      if (!mounted) return;
       setState(() {
         interfaces = data; publicIp = ip.trim();
         wifiWanSsid = staSsid; wifiWanDevice = staDev;
         loading = false; error = null;
       });
-    } catch (e) { setState(() { error = e.toString(); loading = false; }); }
+    } catch (e) { if (mounted) setState(() { error = e.toString(); loading = false; }); }
   }
 
   Future<void> _disconnectWifiWan() async {
@@ -132,8 +133,12 @@ wifi reload
         ),
       );
       if (ok == true) {
-        await widget.service.configureWan(prov, username: user.text, password: pass.text);
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_t('WAN настроен, сеть перезапускается...'))));
+        try {
+          await widget.service.configureWan(prov, username: user.text, password: pass.text);
+          if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_t('WAN настроен, сеть перезапускается...'))));
+        } catch (e) {
+          if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${_t('Ошибка')}: $e')));
+        }
       }
     } else if (proto == 'static') {
       final ipCtrl = TextEditingController();
@@ -163,13 +168,21 @@ wifi reload
         ),
       );
       if (ok == true) {
-        await widget.service.configureWan(prov,
-            ip: ipCtrl.text.trim(), netmask: maskCtrl.text.trim(), gateway: gwCtrl.text.trim(), dns: dnsCtrl.text.trim());
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_t('WAN настроен (Static), сеть перезапускается...'))));
+        try {
+          await widget.service.configureWan(prov,
+              ip: ipCtrl.text.trim(), netmask: maskCtrl.text.trim(), gateway: gwCtrl.text.trim(), dns: dnsCtrl.text.trim());
+          if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_t('WAN настроен (Static), сеть перезапускается...'))));
+        } catch (e) {
+          if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${_t('Ошибка')}: $e')));
+        }
       }
     } else {
-      await widget.service.configureWan(prov);
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_t('WAN настроен (DHCP) — сеть перезапускается'))));
+      try {
+        await widget.service.configureWan(prov);
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_t('WAN настроен (DHCP) — сеть перезапускается'))));
+      } catch (e) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${_t('Ошибка')}: $e')));
+      }
     }
   }
 
@@ -275,9 +288,9 @@ wifi reload
                  setSt(() => result = _t('Проверка...'));
                 try {
                   final res = await widget.service.pingHost(ctrl.text.trim());
-                  setSt(() => result = res);
+                  if (ctx.mounted) setSt(() => result = res);
                 } catch (e) {
-                   setSt(() => result = '${_t('Ошибка')}: $e');
+                  if (ctx.mounted) setSt(() => result = '${_t('Ошибка')}: $e');
                 }
               },
               child: const Text('Ping'),

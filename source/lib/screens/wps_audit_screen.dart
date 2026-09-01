@@ -162,7 +162,13 @@ class _WpsAuditScreenState extends State<WpsAuditScreen> {
   Future<void> _scanPhone() async {
     final s = AppStrings.of(context);
     setState(() { _loading = true; _status = s.text('Сканирование эфира с телефона...'); });
-    final scanStatus = await LocalWifiScanner.scan();
+    WifiScanStatus scanStatus;
+    try {
+      scanStatus = await LocalWifiScanner.scan();
+    } catch (e) {
+      if (mounted) setState(() { _loading = false; _status = '${s.text('Ошибка')}: $e'; });
+      return;
+    }
     final networks = <_WifiScanEntry>[];
     if (scanStatus.success) {
       final seen = <String>{};
@@ -409,15 +415,15 @@ class _NetworkDetailSheetState extends State<_NetworkDetailSheet> {
       });
       return;
     }
-    setState(() { _connecting = true; _checkResult = null; });
+    setState(() { _connecting = true; _connectingAsClient = true; _checkResult = null; });
     try {
       final devs = await widget.service.fetchWirelessDevices();
        if (devs.isEmpty) throw Exception(s.text('Радио не найдено'));
       final radio = devs.first.name;
       await widget.service.wifiClientConnect(radio, widget.network.ssid, _passCtrl.text);
-       setState(() { _connecting = false; _checkResult = s.text('Подключено! Роутер теперь клиент этой сети (WAN)'); });
+       if (mounted) setState(() { _connecting = false; _connectingAsClient = false; _checkResult = s.text('Подключено! Роутер теперь клиент этой сети (WAN)'); });
     } catch (e) {
-       setState(() { _connecting = false; _checkResult = '${s.text('Ошибка подключения')}: $e'; });
+       if (mounted) setState(() { _connecting = false; _connectingAsClient = false; _checkResult = '${s.text('Ошибка подключения')}: $e'; });
     }
   }
 

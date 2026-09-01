@@ -146,7 +146,10 @@ class _TerminalScreenState extends State<TerminalScreen> {
     _session?.close();
     _session = null;
     _connected = false;
-    _appendOutput('\r\n=== ${AppStrings.of(context).text('Отключено')} ===\r\n');
+    if (mounted) {
+      setState(() {});
+      _appendOutput('\r\n=== ${AppStrings.of(context).text('Отключено')} ===\r\n');
+    }
   }
 
   void _clear() {

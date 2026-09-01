@@ -6,7 +6,7 @@ import '../services/openwrt_service.dart';
 import '../services/local_wifi_scanner.dart';
 import '../models/channel_scan_result.dart';
 import 'channel_analyzer_screen.dart';
-import '../widgets/safe_command_dialog.dart';
+import '../widgets/empty_state.dart';
 
 class WifiScreen extends StatefulWidget {
   final OpenWrtService service;
@@ -38,6 +38,7 @@ class _WifiScreenState extends State<WifiScreen> {
       if (!widget.service.isConnected) await widget.service.connect();
       final devs = await widget.service.fetchWirelessDevices();
       final nets = await widget.service.fetchWifiNetworks();
+      if (!mounted) return;
       setState(() {
         devices = devs;
         networks = nets;
@@ -49,6 +50,7 @@ class _WifiScreenState extends State<WifiScreen> {
         _loadChannels(d.name);
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         error = e.toString();
         loading = false;
@@ -60,6 +62,7 @@ class _WifiScreenState extends State<WifiScreen> {
     try {
       final channels = await widget.service.getAvailableChannels(device);
       final interference = await widget.service.scanWifiChannels(device);
+      if (!mounted) return;
       setState(() {
         availableChannels[device] = channels;
         channelInterference[device] = interference;
@@ -838,9 +841,16 @@ class _WifiScreenState extends State<WifiScreen> {
                 ),
               ),
               if (networks.isEmpty)
-                 SliverPadding(
-                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                   sliver: SliverToBoxAdapter(child: Text(s.text('Сети не найдены'))),
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: EmptyState(
+                    asset: 'assets/empty_states/no_wifi.png',
+                    title: s.text('Сети не найдены'),
+                    message: s.text('Проверьте, что радио включено и доступно'),
+                    icon: Icons.refresh,
+                    actionLabel: s.text('Обновить'),
+                    onAction: _load,
+                  ),
                 )
               else
                 SliverPadding(

@@ -29,12 +29,14 @@ class _VpnScreenState extends State<VpnScreen> {
     try {
       if (!widget.service.isConnected) await widget.service.connect();
       final data = await widget.service.fetchVpnStatus();
+      if (!mounted) return;
       setState(() {
         vpns = data;
         loading = false;
         error = null;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         error = e.toString();
         loading = false;
@@ -191,8 +193,12 @@ class _VpnScreenState extends State<VpnScreen> {
         TextField(controller: secret, decoration: InputDecoration(labelText: s.text('IPsec Secret (опц.)'))),
       ])),
       actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: Text(s.text('Отмена'))), FilledButton(onPressed: () async {
-        await widget.service.addL2tpClient(name: name.text, server: server.text, username: user.text, password: pass.text, secret: secret.text.isNotEmpty ? secret.text : null);
-        if (!mounted) return; Navigator.pop(ctx); await _load(); _snack(s.text('L2TP добавлен'));
+        try {
+          await widget.service.addL2tpClient(name: name.text, server: server.text, username: user.text, password: pass.text, secret: secret.text.isNotEmpty ? secret.text : null);
+          if (!mounted) return; Navigator.pop(ctx); await _load(); _snack(s.text('L2TP добавлен'));
+        } catch (e) {
+          if (mounted) _snack('${s.text('Ошибка')}: $e');
+        }
       }, child: Text(s.text('Добавить')))],
     ));
   }
@@ -207,8 +213,12 @@ class _VpnScreenState extends State<VpnScreen> {
         TextField(controller: pass, decoration: InputDecoration(labelText: s.text('Пароль')), obscureText: true),
       ])),
       actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: Text(s.text('Отмена'))), FilledButton(onPressed: () async {
-        await widget.service.addPptpClient(name: name.text, server: server.text, username: user.text, password: pass.text);
-        if (!mounted) return; Navigator.pop(ctx); await _load(); _snack(s.text('PPTP добавлен'));
+        try {
+          await widget.service.addPptpClient(name: name.text, server: server.text, username: user.text, password: pass.text);
+          if (!mounted) return; Navigator.pop(ctx); await _load(); _snack(s.text('PPTP добавлен'));
+        } catch (e) {
+          if (mounted) _snack('${s.text('Ошибка')}: $e');
+        }
       }, child: Text(s.text('Добавить')))],
     ));
   }
@@ -262,8 +272,12 @@ class _VpnScreenState extends State<VpnScreen> {
     showDialog(context: context, builder: (ctx) => AlertDialog(title: const Text('SSTP'), content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
       TextField(controller: n, decoration: InputDecoration(labelText: s.text('Название'))), TextField(controller: server, decoration: InputDecoration(labelText: s.text('Сервер'))), TextField(controller: u, decoration: InputDecoration(labelText: s.text('Логин'))), TextField(controller: p, decoration: InputDecoration(labelText: s.text('Пароль')), obscureText: true),
     ])), actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: Text(s.text('Отмена'))), FilledButton(onPressed: () async {
-      await widget.service.addSstpClient(name: n.text, server: server.text, username: u.text, password: p.text);
-      if (!mounted) return; Navigator.pop(ctx); await _load(); _snack(s.text('SSTP добавлен'));
+      try {
+        await widget.service.addSstpClient(name: n.text, server: server.text, username: u.text, password: p.text);
+        if (!mounted) return; Navigator.pop(ctx); await _load(); _snack(s.text('SSTP добавлен'));
+      } catch (e) {
+        if (mounted) _snack('${s.text('Ошибка')}: $e');
+      }
     }, child: Text(s.text('Добавить')))]));
   }
 
@@ -272,8 +286,12 @@ class _VpnScreenState extends State<VpnScreen> {
     showDialog(context: context, builder: (ctx) => AlertDialog(title: const Text('IPsec / IKEv2'), content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
       TextField(controller: n, decoration: InputDecoration(labelText: s.text('Название'))), TextField(controller: server, decoration: InputDecoration(labelText: s.text('Сервер'))), TextField(controller: u, decoration: InputDecoration(labelText: s.text('Логин'))), TextField(controller: p, decoration: InputDecoration(labelText: s.text('Пароль')), obscureText: true), TextField(controller: psk, decoration: const InputDecoration(labelText: 'Pre-Shared Key')),
     ])), actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: Text(s.text('Отмена'))), FilledButton(onPressed: () async {
-      await widget.service.addIpsecClient(name: n.text, server: server.text, username: u.text, password: p.text, psk: psk.text);
-      if (!mounted) return; Navigator.pop(ctx); await _load(); _snack(s.text('IPsec добавлен'));
+      try {
+        await widget.service.addIpsecClient(name: n.text, server: server.text, username: u.text, password: p.text, psk: psk.text);
+        if (!mounted) return; Navigator.pop(ctx); await _load(); _snack(s.text('IPsec добавлен'));
+      } catch (e) {
+        if (mounted) _snack('${s.text('Ошибка')}: $e');
+      }
     }, child: Text(s.text('Добавить')))]));
   }
 
@@ -282,8 +300,12 @@ class _VpnScreenState extends State<VpnScreen> {
     showDialog(context: context, builder: (ctx) => AlertDialog(title: Text(s.text('Импорт OpenVPN')), content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
       TextField(controller: n, decoration: InputDecoration(labelText: s.text('Название'))), TextField(controller: ctrl, maxLines: 6, decoration: InputDecoration(labelText: s.text('Содержимое .ovpn'))),
     ])), actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: Text(s.text('Отмена'))), FilledButton(onPressed: () async {
-      await widget.service.importOpenvpnConfig(name: n.text, ovpnContent: ctrl.text);
-      if (!mounted) return; Navigator.pop(ctx); await _load(); _snack(s.text('OpenVPN импортирован'));
+      try {
+        await widget.service.importOpenvpnConfig(name: n.text, ovpnContent: ctrl.text);
+        if (!mounted) return; Navigator.pop(ctx); await _load(); _snack(s.text('OpenVPN импортирован'));
+      } catch (e) {
+        if (mounted) _snack('${s.text('Ошибка')}: $e');
+      }
     }, child: Text(s.text('Импорт'))) ]));
   }
 

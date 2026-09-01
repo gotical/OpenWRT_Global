@@ -743,7 +743,6 @@ class OpenWrtService {
     // Старт фоновой закачки 70 МБ (или сколько скачает за лимит времени).
     await runCommand("rm -f /tmp/owrt_dl.bin; (curl -s --max-time 12 -o /tmp/owrt_dl.bin '$url' >/dev/null 2>&1 &) ; echo OK");
     final start = DateTime.now();
-    int prevBytes = 0;
     double? live;
     for (var i = 0; i < 22; i++) {
       await Future.delayed(const Duration(milliseconds: 600));
@@ -756,7 +755,6 @@ class OpenWrtService {
           live = mbps;
           onProgress?.call('download', mbps);
         }
-        prevBytes = bytes;
         if (bytes == 0) continue;
       } catch (_) {}
     }
@@ -821,19 +819,6 @@ class OpenWrtService {
     return null;
   }
 
-  double? _calcMbps(String bytes, String secs) {
-    final b = double.tryParse(bytes) ?? 0;
-    final s = double.tryParse(secs);
-    if (b <= 0 || s == null || s <= 0) return null;
-    return double.parse((b * 8 / s / 1000000).toStringAsFixed(1));
-  }
-
-  double? _lastMbits(String s) {
-    final matches = RegExp(r'(\d+\.?\d*)\s*Mbits/sec').allMatches(s);
-    if (matches.isEmpty) return null;
-    return double.tryParse(matches.last.group(1)!);
-  }
-
   String _extract(String s, String start, String? end) {
     final a = s.indexOf(start); if (a < 0) return '?';
     final v = s.substring(a + start.length);
@@ -841,8 +826,6 @@ class OpenWrtService {
     final b = v.indexOf(end);
     return b < 0 ? v.trim() : v.substring(0, b).trim();
   }
-
-  String _fmt(String r) => r;
 
   Future<void> addGuestNetwork({required String radioDevice, required String ssid}) async {
     final esc = (String s) => s.replaceAll("'", "'\\''");
@@ -3145,20 +3128,12 @@ uci commit firewall
     'lldpd': 'lldpd', 'hcxtools': 'hcxtools',
   };
 
-  int _parseBytes(dynamic value) {
-    if (value == null) return 0;
-    if (value is int) return value;
-    if (value is double) return value.toInt();
-    return int.tryParse(value.toString()) ?? 0;
-  }
-
   Future<List<ClientInfo>> fetchClientsWithTraffic() async {
     final List<ClientInfo> result = [];
     final Map<String, int> macToMonthRx = {};
     final Map<String, int> macToMonthTx = {};
     final Map<String, int> macToWifiRx = {};
     final Map<String, int> macToWifiTx = {};
-    final Map<String, int> macToSignal = {};
     final Map<String, String> macToBand = {};
     final Map<String, String> macToIp = {};
     final Map<String, String> macToHostname = {};
@@ -3384,16 +3359,20 @@ echo '===DONE==='
     final result = <String, String>{};
     // WAN IP
     try { result['wan_ip'] = (await runCommand('wget -qO- --timeout=3 https://api.ipify.org 2>/dev/null || uclient-fetch -qO- --timeout=3 https://api.ipify.org 2>/dev/null || echo ""')).trim(); } catch (_) { result['wan_ip'] = '?'; }
-    // Проверяем существующие redirect правила
+    // Проверяем существующие redirect правила.
+    // Ищем секцию по имени (наш маркер) или по точному dest_port='22'.
+    // NB: uci show печатает опции отдельными строками (firewall.@redirect[0].dest_port='22'),
+    // поэтому искать нужно в строках опций, а не в строках типа секции.
     try {
-      final raw = await runCommand('uci show firewall 2>/dev/null | grep -E "=redirect" | grep -E "dest_port.*22" || echo ""');
-      if (raw.isNotEmpty) {
-        final m = RegExp(r'firewall\.([^=]+)=redirect').firstMatch(raw);
-        if (m != null) {
-          result['rule_section'] = m.group(1)!;
-          result['src_port'] = (await runCommand('uci get firewall.${m.group(1)}.src_dport 2>/dev/null || echo ""')).trim();
-          result['enabled'] = (await runCommand('uci get firewall.${m.group(1)}.enabled 2>/dev/null || echo "1"')).trim();
-        }
+      final raw = await runCommand(
+          "sec=\$(uci show firewall 2>/dev/null | grep \"name='OpenWrtManagerRemote'\" | head -1 | cut -d'.' -f2); "
+          "[ -n \"\$sec\" ] || sec=\$(uci show firewall 2>/dev/null | grep \"dest_port='22'\" | head -1 | cut -d'.' -f2); "
+          "echo \"\$sec\"");
+      final sec = raw.trim();
+      if (sec.isNotEmpty) {
+        result['rule_section'] = sec;
+        result['src_port'] = (await runCommand('uci get firewall.$sec.src_dport 2>/dev/null || echo ""')).trim();
+        result['enabled'] = (await runCommand('uci get firewall.$sec.enabled 2>/dev/null || echo "1"')).trim();
       }
     } catch (_) {}
     return result;
@@ -3415,8 +3394,10 @@ uci commit firewall
   }
 
   Future<void> disableRemoteAccess() async {
+    // Удаляем все redirect-секции: наши (name='OpenWrtManagerRemote')
+    // и старый формат (точный dest_port='22', не .*22 — иначе задели бы 8022/2200).
     await runCommand("""
-for section in \$(uci show firewall 2>/dev/null | grep '=redirect' | grep 'OpenWrtManagerRemote\|dest_port.*22' | cut -d'.' -f2 | cut -d'=' -f1); do
+for section in \$(uci show firewall 2>/dev/null | grep -E "name='OpenWrtManagerRemote'|dest_port='22'" | cut -d'.' -f2 | sort -u); do
   uci delete firewall.\$section 2>/dev/null
 done
 uci commit firewall

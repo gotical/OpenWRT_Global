@@ -81,13 +81,14 @@ class _MacChangerScreenState extends State<MacChangerScreen> {
           } catch (_) {}
         }
       }
+      if (!mounted) return;
       setState(() { _interfaces = ifaces; _loading = false; });
       if (ifaces.isNotEmpty) {
         _selectedIface = ifaces[0]['name'];
         _loadMacInfo(ifaces[0]['name']!);
       }
     } catch (e) {
-      setState(() { _error = e.toString(); _loading = false; });
+      if (mounted) setState(() { _error = e.toString(); _loading = false; });
     }
   }
 
@@ -96,6 +97,7 @@ class _MacChangerScreenState extends State<MacChangerScreen> {
       final cur = (await widget.service.runCommand("cat /sys/class/net/$iface/address 2>/dev/null || echo '?'")).trim();
       final perm = (await widget.service.runCommand("macchanger -s $iface 2>/dev/null | grep -i permanent | awk '{print \$3}' || echo '$cur'")).trim();
       final vendor = (await widget.service.runCommand("macchanger -s $iface 2>/dev/null | grep -i vendor | cut -d: -f2- || echo ''")).trim();
+      if (!mounted) return;
       setState(() {
         _currentMac = cur;
         _permanentMac = perm;

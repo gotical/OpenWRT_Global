@@ -3,6 +3,7 @@ import '../l10n/app_strings.dart';
 import '../models/package_info.dart';
 import '../services/openwrt_service.dart';
 import '../widgets/app_skeleton.dart';
+import '../widgets/empty_state.dart';
 
 class PackagesScreen extends StatefulWidget {
   final OpenWrtService service;
@@ -23,11 +24,18 @@ class _PackagesScreenState extends State<PackagesScreen> {
   String? error;
   final _searchCtrl = TextEditingController();
   int _tabIndex = 0;
+  int _neededKey = 0;
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -36,6 +44,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
       final data = await widget.service.fetchInstalledPackages();
       String? dfRaw;
       try { dfRaw = await widget.service.runCommand('df /overlay 2>/dev/null | tail -1 || echo ""'); } catch (_) {}
+      if (!mounted) return;
       setState(() {
         installed = data;
         if (dfRaw != null && dfRaw.trim().isNotEmpty) {
@@ -48,6 +57,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
         error = null;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         error = e.toString();
         loading = false;
@@ -60,12 +70,13 @@ class _PackagesScreenState extends State<PackagesScreen> {
     setState(() => searching = true);
     try {
       final res = await widget.service.searchPackages(q);
+      if (!mounted) return;
       setState(() {
         searchResults = res;
         searching = false;
       });
     } catch (e) {
-      setState(() => searching = false);
+      if (mounted) setState(() => searching = false);
     }
   }
 
@@ -201,6 +212,16 @@ class _PackagesScreenState extends State<PackagesScreen> {
 
   Widget _buildInstalledList(ThemeData theme) {
     if (error != null) return _buildError(theme);
+    if (installed.isEmpty && !loading) {
+      return EmptyState(
+        asset: 'assets/empty_states/no_logs.png',
+        title: _t('Список пакетов пуст'),
+        message: _t('Не удалось получить список установленных пакетов'),
+        icon: Icons.refresh,
+        actionLabel: _t('Обновить'),
+        onAction: _load,
+      );
+    }
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView.builder(
@@ -260,6 +281,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
 
   Widget _buildNeededTab(ThemeData theme) {
     return FutureBuilder<Map<String, dynamic>>(
+      key: ValueKey(_neededKey),
       future: () async {
         if (!widget.service.isConnected) await widget.service.connect();
         final deps = await widget.service.checkDependencies();
@@ -280,12 +302,32 @@ class _PackagesScreenState extends State<PackagesScreen> {
         return {'deps': deps, 'repo': repoStatus};
       }(),
       builder: (ctx, snap) {
+        if (snap.hasError) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                  const SizedBox(height: 12),
+                  Text('${_t('Ошибка')}: ${snap.error}', textAlign: TextAlign.center),
+                  const SizedBox(height: 12),
+                  FilledButton.tonal(
+                    onPressed: () => setState(() => _neededKey = DateTime.now().millisecondsSinceEpoch),
+                    child: Text(_t('Повторить')),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
         if (!snap.hasData) return const Center(child: CircularProgressIndicator());
         final deps = snap.data!['deps'] as Map<String, bool>;
         final repo = snap.data!['repo'] as Map<String, String>;
         final entries = deps.entries.where((e) => e.key != 'ubus').toList();
         return RefreshIndicator(
-          onRefresh: () async { setState(() {}); },
+          onRefresh: () async { setState(() => _neededKey = DateTime.now().millisecondsSinceEpoch); },
           child: ListView.builder(
             padding: const EdgeInsets.all(16),
             itemCount: entries.length,

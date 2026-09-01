@@ -43,6 +43,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
 
   Future<void> _load() async {
     final list = await StorageService.loadRouters();
+    if (!mounted) return;
     setState(() { routers = list; loading = false; });
     _anim.forward();
   }

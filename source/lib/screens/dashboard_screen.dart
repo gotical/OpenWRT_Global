@@ -124,7 +124,9 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
       try {
         final devs = await widget.service.fetchWirelessDevices();
         if (devs.isNotEmpty) {
+          if (!mounted) return;
           final scan = await widget.service.scanWifiChannels(devs.first.name);
+          if (!mounted) return;
           final maxCount = scan.values.isEmpty ? 0 : scan.values.reduce((a, b) => a > b ? a : b);
            if (maxCount == 0) { interferenceLevel = AppStrings.of(context).text('Чисто'); interferenceColor = Colors.green; }
            else if (maxCount <= 3) { interferenceLevel = AppStrings.of(context).text('Слабые'); interferenceColor = Colors.orange; }
@@ -216,7 +218,7 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
   Widget _header(ThemeData t) => TweenAnimationBuilder<double>(duration: const Duration(milliseconds: 600), tween: Tween(begin: 0.95, end: 1.0), curve: Curves.easeOutBack, builder: (_, v, c) => Transform.scale(scale: v, child: c), child: Card(
     child: Container(decoration: BoxDecoration(gradient: LinearGradient(colors: [t.colorScheme.primary, t.colorScheme.tertiary]), borderRadius: BorderRadius.circular(20)), padding: const EdgeInsets.all(18),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [const CircleAvatar(backgroundColor: Colors.white24, child: Icon(Icons.router, color: Colors.white)), const SizedBox(width: 14),
+        Row(children: [_PulsingRouterAvatar(), const SizedBox(width: 14),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('OpenWRT ${info!.firmwareVersion.replaceAll('OpenWrt ', '')}', style: t.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold, color: Colors.white)),
             Text(info!.model, style: t.textTheme.bodyMedium?.copyWith(color: Colors.white70)),
@@ -296,4 +298,57 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
       ),
     ]),
   ]))));
+}
+
+/// Анимированный «пульсирующий» аватар роутера для шапки дашборда.
+class _PulsingRouterAvatar extends StatefulWidget {
+  @override
+  State<_PulsingRouterAvatar> createState() => _PulsingRouterAvatarState();
+}
+
+class _PulsingRouterAvatarState extends State<_PulsingRouterAvatar>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 1800))
+      ..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (_, __) => Stack(
+        alignment: Alignment.center,
+        children: [
+          // Пульсирующие кольца (Wi-Fi)
+          Opacity(
+            opacity: 0.35 * (1 - _ctrl.value),
+            child: Container(
+              width: 48 + 12 * _ctrl.value,
+              height: 48 + 12 * _ctrl.value,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 2),
+              ),
+            ),
+          ),
+          const CircleAvatar(
+            backgroundColor: Colors.white24,
+            child: Icon(Icons.router, color: Colors.white),
+          ),
+        ],
+      ),
+    );
+  }
 }

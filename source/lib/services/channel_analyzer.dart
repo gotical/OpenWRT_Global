@@ -58,6 +58,8 @@ class ChannelAnalyzer {
       routerScans: routerScans,
       routerInterference: routerInterference,
       recommendedChannels: recommended,
+      routerError: routerError,
+      phoneMessage: phoneMessage,
     );
   }
 

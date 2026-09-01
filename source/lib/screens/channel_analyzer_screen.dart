@@ -212,9 +212,6 @@ class _ChannelAnalyzerScreenState extends State<ChannelAnalyzerScreen> {
               spacing: 8,
               children: widths.map((w) {
                 final selected = _selectedWidth == w;
-                final htMode = _analysis!.band == '5g'
-                    ? (w >= 80 ? 'HE$w' : 'HT$w')
-                    : (w >= 40 ? 'HE$w' : 'HT$w');
                 return ChoiceChip(
                   label: Text('${w}MHz'),
                   selected: selected,
