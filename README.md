@@ -3,7 +3,7 @@
 Мобильное приложение для управления роутерами OpenWRT через SSH.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Release](https://img.shields.io/badge/release-v4.0.3-brightgreen)](https://github.com/gotical/OpenWRT_Global/releases/latest)
+[![Release](https://img.shields.io/badge/release-v4.1.0-brightgreen)](https://github.com/gotical/OpenWRT_Global/releases/latest)
 [![Android](https://img.shields.io/badge/Android-7.0%2B-green)](https://github.com/USAchevIP/OpenWRT_Global/releases/latest)
 
 🌐 [rybinsklab.ru/openwrt](https://rybinsklab.ru/openwrt/) | 📱 [4PDA](https://4pda.to/forum/index.php?showtopic=911457&view=findpost&p=144455263)
@@ -118,6 +118,12 @@ No LuCI or other web interfaces required on the router. Everything works through
 - **✅ Сумяшчальнасць** — OpenWRT, ImmortalWrt, FriendlyWrt і LEDE версій 19.07–24.10
 
 ---
+## Версия 4.1.0
+
+- Полностью переделан модуль измерения скорости.
+- Файловый диспетчер USB|SSD.
+- Тестирование безопасности вашей WIFI точки.
+- Синхронизация времени с вашего Android устройства на Роутер.
 
 ## Версия 4.0.3
 
