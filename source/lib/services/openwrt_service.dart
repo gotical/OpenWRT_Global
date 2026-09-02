@@ -1904,7 +1904,9 @@ echo "$stopM $stopH * * * nft delete element inet fw4 blocklist { $cleanMac } 2>
     result.addAll(detected);
 
     // 2. Прочие USB-устройства (модемы, принтеры, адаптеры) через lsusb.
-    // Не добавляем дубликаты накопителей.
+    // Не добавляем дубликаты накопителей. Игнорируем внутренние корневые
+    // USB-хабы (Linux Foundation, root hub, EHCI, xHCI и т.п.) — это
+    // служебная обвязка роутера, монтировать её нельзя.
     try {
       final raw = await runCommand('lsusb 2>/dev/null || echo ""');
       for (final line in LineSplitter.split(raw)) {
@@ -1913,6 +1915,19 @@ echo "$stopM $stopH * * * nft delete element inet fw4 blocklist { $cleanMac } 2>
           final name = m.group(1)!.trim();
           if (result.any((e) => e['name'] == name)) continue;
           final lower = name.toLowerCase();
+          // Скрываем внутренние корневые USB-хабы и служебные чипы роутера.
+          if (lower.contains('linux foundation') ||
+              lower.contains('root hub') ||
+              lower.contains('ehci') ||
+              lower.contains('xhci') ||
+              lower.contains('ohci') ||
+              lower.contains('uhci') ||
+              lower.startsWith('router') ||
+              lower.contains('gadget') ||
+              lower.contains('dwc2') ||
+              lower.contains('dwc3')) {
+            continue;
+          }
           if (lower.contains('usb disk') || lower.contains('flash') ||
               lower.contains('storage') || lower.contains('cruzer') ||
               lower.contains('data traveler') || lower.contains('card reader') ||
@@ -1923,11 +1938,21 @@ echo "$stopM $stopH * * * nft delete element inet fw4 blocklist { $cleanMac } 2>
             'modem', '4g lte', 'lte modem', 'wwan', 'cdc ', 'option', 'qmi',
             'cellular', 'ec20', 'simcom', 'meeg', 'rndis', 'uc20',
           ].any(lower.contains);
-          result.add({
-            'name': name, 'size': 'USB', 'mount': '—',
-            'type': isModem ? 'USB-модем' : 'устройство',
-            'fstype': '', 'used': '', 'avail': '', 'browsable': '0',
-          });
+          final isPrinter = lower.contains('printer') || lower.contains('hp ');
+          final isGenericHub = lower.contains('hub');
+          // Показываем только устройства, с которыми можно что-то сделать:
+          // модемы, принтеры, всё, что не чип роутера.
+          if (isModem || isPrinter || (!isGenericHub)) {
+            result.add({
+              'name': name, 'size': 'USB', 'mount': '—',
+              'type': isModem
+                  ? 'USB-модем'
+                  : isPrinter
+                      ? 'принтер'
+                      : 'устройство',
+              'fstype': '', 'used': '', 'avail': '', 'browsable': '0',
+            });
+          }
         }
       }
     } catch (_) {}
@@ -2083,7 +2108,7 @@ echo "$stopM $stopH * * * nft delete element inet fw4 blocklist { $cleanMac } 2>
     final kind = isDisk
         ? _detectDiskType('${m['VENDOR'] ?? ''} ${m['MODEL'] ?? ''}', row['ROTA'] ?? '0', size)
         : 'раздел';
-    final browsable = mount.isNotEmpty && mount != '-' && mount != '';
+    final browsable = mount.isNotEmpty && mount != '-' && mount != '' && mount != '/';
     String used = '', avail = '';
     if (browsable) {
       final d = await _dfUsage(mount);
@@ -2146,11 +2171,13 @@ echo "$stopM $stopH * * * nft delete element inet fw4 blocklist { $cleanMac } 2>
 
   /// Bulk-монтирование: для каждого USB-диска без таблицы разделов
   /// автоматически подключает первый раздел (sda → sda1). Возвращает
-  /// пары «устройство → точка монтирования» для успешных.
+  /// пары «устройство → точка монтирования» для успешных. НЕ монтирует
+  /// устройства, уже смонтированные в системные пути (/, /boot, /overlay).
   Future<List<MapEntry<String, String>>> mountAllUsbPartitions() async {
     final result = <MapEntry<String, String>>[];
     try {
-      // 1. Уже смонтированные пропускаем.
+      // 1. Уже смонтированные: пропускаем те, что на /dev/sd*, а системные
+      // (/, /boot, /overlay) никогда не трогаем.
       final existing = await runCommand(
           'awk \'{print \$1 " " \$2}\' /proc/mounts 2>/dev/null');
       final mountedDevs = <String>{};
@@ -2171,13 +2198,12 @@ echo "$stopM $stopH * * * nft delete element inet fw4 blocklist { $cleanMac } 2>
       for (final line in LineSplitter.split(raw)) {
         final dev = line.trim();
         if (dev.isEmpty) continue;
-        // Берём и сам диск, и первый раздел.
         seen.add(dev);
         if (!RegExp(r'\d$').hasMatch(dev)) {
           seen.add('${dev}1');
         }
       }
-      // 3. Монтируем.
+      // 3. Монтируем только те, что НЕ в списке уже-смонтированных.
       for (final dev in seen) {
         final path = '/dev/$dev';
         if (mountedDevs.contains(path)) continue;
