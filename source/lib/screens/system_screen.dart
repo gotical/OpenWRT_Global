@@ -1165,6 +1165,30 @@ class _SystemScreenState extends State<SystemScreen> {
                     style: Theme.of(bctx).textTheme.bodySmall),
               ]),
             ),
+            // Подсказка + кнопка «Смонтировать всё».
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(_t('Если флешка одна и кнопка «Подключить» не сработала — нажмите эту кнопку: она сама найдёт разделы и смонтирует их.'),
+                      style: Theme.of(bctx).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(bctx).colorScheme.onSurfaceVariant)),
+                  const SizedBox(height: 8),
+                  FilledButton.icon(
+                    onPressed: () {
+                      Navigator.pop(bctx);
+                      _mountAllUsb();
+                      // Обновляем список устройств после монтирования.
+                      Future.delayed(const Duration(milliseconds: 800),
+                          () => _showUsbDevices());
+                    },
+                    icon: const Icon(Icons.link),
+                    label: Text(_t('Смонтировать все разделы')),
+                  ),
+                ],
+              ),
+            ),
             Expanded(
               child: devs.isEmpty
                   ? Center(
@@ -1245,6 +1269,28 @@ class _SystemScreenState extends State<SystemScreen> {
         ),
       ),
     );
+  }
+
+  /// Запуск по нажатию «Смонтировать все разделы» в bottom sheet.
+  Future<void> _mountAllUsb() async {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        duration: const Duration(seconds: 2),
+        content: Text(_t('Подключаю все разделы USB...'))));
+    List<MapEntry<String, String>> mountedList;
+    try {
+      mountedList = await widget.service.mountAllUsbPartitions();
+    } catch (e) {
+      if (!mounted) return;
+      _snack('${_t('Ошибка')}: $e');
+      return;
+    }
+    if (!mounted) return;
+    if (mountedList.isEmpty) {
+      _snack(_t('Все доступные разделы уже смонтированы'));
+      return;
+    }
+    _snack('${_t('Смонтировано')}: ${mountedList.length}');
+    setState(() {});
   }
 
   Future<void> _runNmapScan() async {

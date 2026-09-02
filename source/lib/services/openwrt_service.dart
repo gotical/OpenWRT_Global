@@ -2121,14 +2121,71 @@ echo "$stopM $stopH * * * nft delete element inet fw4 blocklist { $cleanMac } 2>
   /// или null, если не удалось.
   Future<String?> mountUsbDevice(String device) async {
     try {
-      final base = device.replaceAll('/dev/', '').replaceAll('/', '_');
-      final mount = '/mnt/$base';
-      final r = await runCommand(
-          "mkdir -p '$mount' && mount '$device' '$mount' 2>/dev/null && echo OK || echo FAIL");
-      return r.trim().endsWith('OK') ? mount : null;
+      Future<String?> tryMount(String dev) async {
+        final base = dev.replaceAll('/dev/', '').replaceAll('/', '_');
+        final mount = '/mnt/$base';
+        final r = await runCommand(
+            "mkdir -p '$mount' && mount '$dev' '$mount' 2>/dev/null && echo OK || echo FAIL");
+        return r.trim().endsWith('OK') ? mount : null;
+      }
+      // Сначала пробуем как есть.
+      var m = await tryMount(device);
+      if (m != null) return m;
+      // Если это «голый» диск (sda) — пробуем первый раздел sda1, иначе
+      // /dev/sda не смонтируется, и пользователь думает, что приложение
+      // не работает. Если и раздел не монтируется — последний шанс.
+      if (!RegExp(r'\d$').hasMatch(device)) {
+        m = await tryMount('${device}1');
+        if (m != null) return m;
+      }
+      return null;
     } catch (_) {
       return null;
     }
+  }
+
+  /// Bulk-монтирование: для каждого USB-диска без таблицы разделов
+  /// автоматически подключает первый раздел (sda → sda1). Возвращает
+  /// пары «устройство → точка монтирования» для успешных.
+  Future<List<MapEntry<String, String>>> mountAllUsbPartitions() async {
+    final result = <MapEntry<String, String>>[];
+    try {
+      // 1. Уже смонтированные пропускаем.
+      final existing = await runCommand(
+          'awk \'{print \$1 " " \$2}\' /proc/mounts 2>/dev/null');
+      final mountedDevs = <String>{};
+      for (final line in LineSplitter.split(existing)) {
+        final p = line.trim().split(' ');
+        if (p.length >= 2 && p[0].startsWith('/dev/')) {
+          mountedDevs.add(p[0]);
+        }
+      }
+      // 2. Список блочных устройств USB.
+      final raw = await runCommand(
+          'for d in /sys/class/block/sd*; do '
+          '[ -e "\$d/device" ] || continue; '
+          'p=\$(readlink -f "\$d/device" 2>/dev/null); '
+          'case "\$p" in *usb*) basename "\$d";; esac; '
+          'done 2>/dev/null');
+      final seen = <String>{};
+      for (final line in LineSplitter.split(raw)) {
+        final dev = line.trim();
+        if (dev.isEmpty) continue;
+        // Берём и сам диск, и первый раздел.
+        seen.add(dev);
+        if (!RegExp(r'\d$').hasMatch(dev)) {
+          seen.add('${dev}1');
+        }
+      }
+      // 3. Монтируем.
+      for (final dev in seen) {
+        final path = '/dev/$dev';
+        if (mountedDevs.contains(path)) continue;
+        final m = await mountUsbDevice(path);
+        if (m != null) result.add(MapEntry(path, m));
+      }
+    } catch (_) {}
+    return result;
   }
 
   /// Размонтировать USB-накопитель/раздел.
@@ -3339,32 +3396,25 @@ echo '===DONE==='
       ));
     }
 
-    // 9. «Не в сети»: устройства, которые юзер раньше пометил именем или для
-    //    которых есть DHCP lease — но прямо сейчас их нет ни в ARP, ни в
-    //    WiFi станциях. Помечаем active=false, чтобы UI отдельно показал их
-    //    полупрозрачными с подписью «Не в сети».
-    try {
-      final knownNames = await StorageService.loadDeviceNames();
-      final knownOfflineMacs = <String>{
-        ...knownNames.keys,
-        ...leaseExpiry.keys.where((m) => !activeMacs.contains(m)),
-      };
-      for (final mac in knownOfflineMacs) {
-        if (activeMacs.contains(mac)) continue;
-        if (result.any((c) => c.mac == mac)) continue;
-        final customName = knownNames[mac];
-        if (customName == null) continue;
-        result.add(ClientInfo(
-          hostname: customName,
-          mac: mac,
-          ip: macToIp[mac],
-          active: false,
-          leaseExpiry: leaseExpiry[mac],
-          monthRxBytes: macToMonthRx[mac] ?? 0,
-          monthTxBytes: macToMonthTx[mac] ?? 0,
-        ));
-      }
-    } catch (_) {}
+    // 9. «Не в сети»: устройства, для которых есть DHCP lease, но прямо
+    //    сейчас их нет в reachable ARP / WiFi stations / FDB. Помечаем
+    //    active=false, чтобы UI отдельно показал их полупрозрачными.
+    //    Показываем ВСЕ такие устройства (а не только переименованные) —
+    //    иначе оффлайн-список был бы пустым для пользователей, которые
+    //    никогда ничего не переименовывали.
+    for (final mac in leaseExpiry.keys) {
+      if (activeMacs.contains(mac)) continue; // уже активный
+      if (result.any((c) => c.mac == mac)) continue;
+      result.add(ClientInfo(
+        hostname: macToHostname[mac] ?? 'Unknown',
+        mac: mac,
+        ip: macToIp[mac],
+        active: false,
+        leaseExpiry: leaseExpiry[mac],
+        monthRxBytes: macToMonthRx[mac] ?? 0,
+        monthTxBytes: macToMonthTx[mac] ?? 0,
+      ));
+    }
 
     return result;
   }
