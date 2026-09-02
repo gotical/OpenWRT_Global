@@ -3201,29 +3201,37 @@ echo '===DONE==='
     final fdbSection = _extractSection(raw, 'FDB');
     final nlbwSection = _extractSection(raw, 'NLBW');
 
-    // 3. DHCP Leases
+    // 3. DHCP Leases — собираем hostname/ip/expiry, но НЕ делаем устройство
+    //    активным только из-за lease: /tmp/dhcp.leases хранит ВСЕ когда-либо
+    //    выданные lease'ы (dnsmasq вычищает их с задержкой). Реальный признак
+    //    «онлайн» — reachable ARP / WiFi station dump / bridge FDB.
+    final leaseExpiry = <String, int>{};
     for (final line in LineSplitter.split(leasesSection)) {
       final parts = line.trim().split(RegExp(r'\s+'));
       if (parts.length >= 4) {
         final mac = parts[1].toLowerCase();
-        activeMacs.add(mac);
         macToIp[mac] = parts[2];
-        macToHostname[mac] = parts[3] != '*' ? parts[3] : 'Unknown';
+        if (macToHostname[mac] == null) {
+          macToHostname[mac] = parts[3] != '*' ? parts[3] : 'Unknown';
+        }
+        leaseExpiry[mac] = int.tryParse(parts[0]) ?? 0;
       }
     }
 
-    // 4. ARP
+    // 4. ARP — берём ТОЛЬКО записи с флагом 0x2 (REACHABLE). 0x0 = incomplete,
+    //    0x4 = stale (запись висит после ухода клиента часами). Именно из-за
+    //    stale-записей список раздувался до 50+ устройств, из которых 47
+    //    давно оффлайн.
+    final reachableMacs = <String>{};
     for (final line in LineSplitter.split(arpSection)) {
       final parts = line.trim().split(RegExp(r'\s+'));
-      if (parts.length >= 4 && parts[3] != '00:00:00:00:00:00') {
-        final mac = parts[3].toLowerCase();
-        if (!activeMacs.contains(mac)) {
-          activeMacs.add(mac);
-          macToHostname[mac] = 'Unknown';
-        }
-        if (parts[2] != '0x0') {
-          macToIp[mac] = parts[0];
-        }
+      if (parts.length < 4 || parts[3] == '00:00:00:00:00:00') continue;
+      final mac = parts[3].toLowerCase();
+      if (parts[2] == '0x2') {
+        reachableMacs.add(mac);
+        activeMacs.add(mac);
+        macToIp[mac] = parts[0];
+        if (!macToHostname.containsKey(mac)) macToHostname[mac] = 'Unknown';
         macToIface[mac] = parts.last;
       }
     }
@@ -3295,7 +3303,8 @@ echo '===DONE==='
       }
     }
 
-    // 8. Собираем результат
+    // 8. Собираем «онлайн»: только то, что прямо сейчас видно в reachable ARP,
+    //    WiFi station dump или bridge FDB.
     for (final mac in activeMacs) {
       final ip = macToIp[mac];
       if (ip == routerIp || ip == '127.0.0.1') continue;
@@ -3318,6 +3327,7 @@ echo '===DONE==='
         mac: mac,
         ip: ip,
         active: true,
+        leaseExpiry: leaseExpiry[mac],
         rxBytes: macToWifiRx[mac] ?? 0,
         txBytes: macToWifiTx[mac] ?? 0,
         monthRxBytes: macToMonthRx[mac] ?? 0,
@@ -3328,6 +3338,33 @@ echo '===DONE==='
         txBitrate: macToBitrateTx[mac],
       ));
     }
+
+    // 9. «Не в сети»: устройства, которые юзер раньше пометил именем или для
+    //    которых есть DHCP lease — но прямо сейчас их нет ни в ARP, ни в
+    //    WiFi станциях. Помечаем active=false, чтобы UI отдельно показал их
+    //    полупрозрачными с подписью «Не в сети».
+    try {
+      final knownNames = await StorageService.loadDeviceNames();
+      final knownOfflineMacs = <String>{
+        ...knownNames.keys,
+        ...leaseExpiry.keys.where((m) => !activeMacs.contains(m)),
+      };
+      for (final mac in knownOfflineMacs) {
+        if (activeMacs.contains(mac)) continue;
+        if (result.any((c) => c.mac == mac)) continue;
+        final customName = knownNames[mac];
+        if (customName == null) continue;
+        result.add(ClientInfo(
+          hostname: customName,
+          mac: mac,
+          ip: macToIp[mac],
+          active: false,
+          leaseExpiry: leaseExpiry[mac],
+          monthRxBytes: macToMonthRx[mac] ?? 0,
+          monthTxBytes: macToMonthTx[mac] ?? 0,
+        ));
+      }
+    } catch (_) {}
 
     return result;
   }

@@ -28,6 +28,7 @@ class ClientsScreenState extends State<ClientsScreen> {
   String? error;
   final _searchCtrl = TextEditingController();
   bool treeView = true;
+  bool _showOffline = true;
 
   @override
   void initState() {
@@ -64,10 +65,20 @@ class ClientsScreenState extends State<ClientsScreen> {
 
   void _filter() {
     final q = _searchCtrl.text.toLowerCase();
-    setState(() => filtered = allClients.where((c) =>
-        c.hostname.toLowerCase().contains(q) ||
-        c.mac.toLowerCase().contains(q) ||
-        (c.ip?.toLowerCase().contains(q) ?? false)).toList());
+    setState(() {
+      filtered = allClients.where((c) {
+        final matchesSearch = c.hostname.toLowerCase().contains(q) ||
+            c.mac.toLowerCase().contains(q) ||
+            (c.ip?.toLowerCase().contains(q) ?? false);
+        final matchesOffline = _showOffline || c.active;
+        return matchesSearch && matchesOffline;
+      }).toList();
+      // Сначала онлайн, потом оффлайн (визуально естественнее).
+      filtered.sort((a, b) {
+        if (a.active != b.active) return a.active ? -1 : 1;
+        return a.hostname.toLowerCase().compareTo(b.hostname.toLowerCase());
+      });
+    });
   }
 
   Map<String, List<ClientInfo>> get _byInterface {
@@ -75,14 +86,22 @@ class ClientsScreenState extends State<ClientsScreen> {
     // Сортировка: WiFi 2.4, WiFi 5, LAN
     final order = ['Wi-Fi 2.4GHz', 'Wi-Fi 5GHz', 'Wi-Fi 6GHz', 'LAN'];
     for (final label in order) {
-      final clients = allClients.where((c) => c.connectionType == label).toList();
+      final clients = allClients.where((c) => c.active && c.connectionType == label).toList();
       if (clients.isNotEmpty) map[label] = clients;
     }
-    // Остальные
+    // Остальные (активные)
     for (final c in allClients) {
-      if (!order.contains(c.connectionType)) {
+      if (c.active && !order.contains(c.connectionType)) {
         final key = c.connectionType ?? _t('Другое');
         map.putIfAbsent(key, () => []).add(c);
+      }
+    }
+    // Оффлайн — отдельной секцией в конце.
+    if (_showOffline) {
+      final offline = allClients.where((c) => !c.active).toList()
+        ..sort((a, b) => a.hostname.toLowerCase().compareTo(b.hostname.toLowerCase()));
+      if (offline.isNotEmpty) {
+        map[_t('Не в сети')] = offline;
       }
     }
     return map;
@@ -343,34 +362,42 @@ class ClientsScreenState extends State<ClientsScreen> {
         behavior: SnackBarBehavior.floating,
       ));
 
-  List<Widget> _buildSection(String name, List<ClientInfo> list, ThemeData t) => [
+  List<Widget> _buildSection(String name, List<ClientInfo> list, ThemeData t) {
+    final isOffline = name == _t('Не в сети');
+    final iconColor = isOffline
+        ? t.colorScheme.onSurfaceVariant
+        : name.contains('5GHz') ? const Color(0xFF0077CC) :
+          name.contains('2.4GHz') ? const Color(0xFF2E7D32) :
+          name.contains('6GHz') ? const Color(0xFF9C27B0) :
+          t.colorScheme.primary;
+    return [
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
           sliver: SliverToBoxAdapter(
             child: Row(children: [
               Icon(
-                name.contains('5GHz') ? Icons.wifi : 
-                name.contains('2.4GHz') ? Icons.wifi : 
-                name.contains('6GHz') ? Icons.signal_cellular_alt : 
+                isOffline ? Icons.cloud_off :
+                name.contains('5GHz') ? Icons.wifi :
+                name.contains('2.4GHz') ? Icons.wifi :
+                name.contains('6GHz') ? Icons.signal_cellular_alt :
                 Icons.settings_ethernet,
                 size: 20,
-                color: name.contains('5GHz') ? const Color(0xFF0077CC) :
-                       name.contains('2.4GHz') ? const Color(0xFF2E7D32) :
-                       name.contains('6GHz') ? const Color(0xFF9C27B0) :
-                       t.colorScheme.primary,
+                color: iconColor,
               ),
               const SizedBox(width: 8),
               Text(name,
-                  style: t.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                  style: t.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: isOffline ? t.colorScheme.onSurfaceVariant : null)),
               const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
-                  color: t.colorScheme.primary.withValues(alpha: 0.1),
+                  color: iconColor.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text('${list.length}',
-                    style: t.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600)),
+                    style: t.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600, color: iconColor)),
               ),
             ]),
           ),
@@ -383,6 +410,7 @@ class ClientsScreenState extends State<ClientsScreen> {
           ),
         ),
       ];
+  }
 
   @override
   void dispose() {
@@ -410,6 +438,12 @@ class ClientsScreenState extends State<ClientsScreen> {
                    tooltip: _t('Вид'),
                 ),
                 IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
+                if (filtered.any((c) => !c.active))
+                  IconButton(
+                    tooltip: _showOffline ? _t('Скрыть не в сети') : _t('Показать не в сети'),
+                    icon: Icon(_showOffline ? Icons.visibility_off : Icons.visibility),
+                    onPressed: () => setState(() => _showOffline = !_showOffline),
+                  ),
               ],
             ),
             SliverPadding(
@@ -430,6 +464,14 @@ class ClientsScreenState extends State<ClientsScreen> {
                 ),
               ),
             ),
+            if (!loading && error == null && filtered.isNotEmpty) ...[
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                sliver: SliverToBoxAdapter(
+                  child: _onlineOfflineCounts(t),
+                ),
+              ),
+            ],
             if (loading)
               SliverPadding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -509,15 +551,50 @@ class ClientsScreenState extends State<ClientsScreen> {
         ]),
       );
 
+  /// Бейдж-счётчик «N онлайн · M не в сети».
+  Widget _onlineOfflineCounts(ThemeData t) {
+    final online = filtered.where((c) => c.active).length;
+    final offline = filtered.where((c) => !c.active).length;
+    return Row(
+      children: [
+        _statusChip(t, Icons.wifi_tethering, '$online ${_t('онлайн')}',
+            t.colorScheme.primary),
+        if (offline > 0) ...[
+          const SizedBox(width: 8),
+          _statusChip(t, Icons.cloud_off, '$offline ${_t('не в сети')}',
+              t.colorScheme.onSurfaceVariant),
+        ],
+      ],
+    );
+  }
+
+  Widget _statusChip(ThemeData t, IconData icon, String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, size: 14, color: color),
+        const SizedBox(width: 6),
+        Text(label,
+            style: t.textTheme.bodySmall
+                ?.copyWith(color: color, fontWeight: FontWeight.w600)),
+      ]),
+    );
+  }
+
   Widget _clientCard(ClientInfo c, ThemeData t) {
     final blocked = blockedMacs.contains(c.mac);
     final limit = limits[c.mac];
+    final isOffline = !c.active;
     final progress = _progress(c);
     final bandColor = c.connectionType?.contains('6GHz') == true ? const Color(0xFF9C27B0) :
                       c.connectionType?.contains('5GHz') == true ? const Color(0xFF0077CC) :
                       c.connectionType?.contains('2.4GHz') == true ? const Color(0xFF2E7D32) :
                       const Color(0xFF6D4C41);
-    return GestureDetector(
+    final card = GestureDetector(
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => ClientDetailScreen(service: widget.service, client: c),
@@ -545,7 +622,22 @@ class ClientsScreenState extends State<ClientsScreen> {
           title: Row(
             children: [
               Expanded(child: Text(_displayName(c),
-                  style: t.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600))),
+                  style: t.textTheme.bodyLarge?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: isOffline ? t.colorScheme.onSurfaceVariant : null))),
+              if (isOffline) ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.withValues(alpha: 0.18),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(_t('Не в сети'),
+                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600,
+                          color: t.colorScheme.onSurfaceVariant)),
+                ),
+              ],
               if (c.isWifi) ...[
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -656,5 +748,7 @@ class ClientsScreenState extends State<ClientsScreen> {
         ),
       ),
     );
+    if (isOffline) return Opacity(opacity: 0.55, child: IgnorePointer(ignoring: false, child: card));
+    return card;
   }
 }
