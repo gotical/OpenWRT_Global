@@ -1217,17 +1217,23 @@ class _SystemScreenState extends State<SystemScreen> {
                         child: _UsbTile(
                           d: devs[i],
                           onBrowse: () {
+                            // ВАЖНО: push делаем ДО pop, иначе бывают гонки
+                            // навигации — закрытие sheet проглатывает push.
+                            final startPath = (devs[i]['mount'] ?? '') == '—'
+                                ? '/'
+                                : devs[i]['mount']!;
+                            final devicePath = (devs[i]['dev'] ?? '').isEmpty
+                                ? null
+                                : devs[i]['dev'];
+                            final rootNav = Navigator.of(context, rootNavigator: true);
+                            rootNav.push(MaterialPageRoute(
+                              builder: (_) => UsbBrowserScreen(
+                                service: widget.service,
+                                startPath: startPath,
+                                devicePath: devicePath,
+                              ),
+                            ));
                             Navigator.pop(bctx);
-                            Navigator.of(context).push(MaterialPageRoute(
-                                builder: (_) => UsbBrowserScreen(
-                                      service: widget.service,
-                                      startPath: (devs[i]['mount'] ?? '') == '—'
-                                          ? '/'
-                                          : devs[i]['mount']!,
-                                      devicePath: (devs[i]['dev'] ?? '').isEmpty
-                                          ? null
-                                          : devs[i]['dev'],
-                                    )));
                           },
                           onMount: () async {
                             final dev = devs[i]['dev'] ?? '';
@@ -1254,7 +1260,10 @@ class _SystemScreenState extends State<SystemScreen> {
                                           'Не удалось подключить: монтируйте раздел (например /dev/sda1), а не весь диск'))));
                               return;
                             }
-                            Navigator.of(context).push(MaterialPageRoute(
+                            // Push ДО pop sheet (который уже закрыт на этом
+                            // этапе). Используем rootNavigator чтобы избежать
+                            // гонок.
+                            Navigator.of(context, rootNavigator: true).push(MaterialPageRoute(
                                 builder: (_) => UsbBrowserScreen(
                                       service: widget.service,
                                       startPath: mount!,
