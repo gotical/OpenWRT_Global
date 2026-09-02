@@ -554,18 +554,116 @@ class ClientsScreenState extends State<ClientsScreen> {
   /// Бейдж-счётчик «N онлайн · M не в сети».
   Widget _onlineOfflineCounts(ThemeData t) {
     final online = filtered.where((c) => c.active).length;
-    final offline = filtered.where((c) => !c.active).length;
+    final offline = filtered.where((c) => !c.active).toList();
     return Row(
       children: [
         _statusChip(t, Icons.wifi_tethering, '$online ${_t('онлайн')}',
             t.colorScheme.primary),
-        if (offline > 0) ...[
+        if (offline.isNotEmpty) ...[
           const SizedBox(width: 8),
-          _statusChip(t, Icons.cloud_off, '$offline ${_t('не в сети')}',
-              t.colorScheme.onSurfaceVariant),
+          InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: () => _showOfflineDialog(offline),
+            child: _statusChip(t, Icons.cloud_off,
+                '${offline.length} ${_t('не в сети')}',
+                t.colorScheme.onSurfaceVariant),
+          ),
         ],
       ],
     );
+  }
+
+  /// Диалог со списком оффлайн-устройств и кнопкой «Очистить».
+  Future<void> _showOfflineDialog(List<ClientInfo> offline) async {
+    final t = Theme.of(context);
+    final s = AppStrings.of(context);
+    final cleared = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setStLocal) => AlertDialog(
+          title: Row(children: [
+            const Icon(Icons.cloud_off),
+            const SizedBox(width: 8),
+            Text('${_t('Не в сети')} (${offline.length})'),
+          ]),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    _t('Эти устройства сейчас не в сети. Их имена сохранены локально и могут быть очищены.'),
+                    style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant),
+                  ),
+                ),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 360),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: offline
+                          .map((c) => ListTile(
+                                dense: true,
+                                contentPadding: EdgeInsets.zero,
+                                leading: const Icon(Icons.cloud_off, color: Colors.grey),
+                                title: Text(_displayName(c),
+                                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                                subtitle: Text('${c.mac} • ${c.ip ?? '—'}',
+                                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                              ))
+                          .toList(),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(_t('Закрыть')),
+            ),
+            FilledButton.tonalIcon(
+              onPressed: () => Navigator.pop(ctx, true),
+              icon: const Icon(Icons.delete_sweep_outlined),
+              label: Text(_t('Очистить')),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (cleared == true) {
+      await _clearOffline(offline);
+    }
+  }
+
+  /// Удаляет имена оффлайн-устройств из настроек и из списка.
+  Future<void> _clearOffline(List<ClientInfo> offline) async {
+    final macs = offline.map((c) => c.mac).toList();
+    int removed = 0;
+    try {
+      removed = await StorageService.removeDeviceNames(macs);
+    } catch (e) {
+      if (mounted) _snack('${_t('Ошибка')}: $e');
+      return;
+    }
+    // Убираем из локального кэша имён.
+    for (final c in offline) {
+      deviceNames.remove(c.mac);
+    }
+    // Убираем из текущего списка.
+    setState(() {
+      allClients = allClients.where((c) => c.active).toList();
+      _filter();
+    });
+    if (mounted) {
+      _snack(removed > 0
+          ? '${_t('Удалено')}: $removed'
+          : _t('Нечего удалять'));
+    }
   }
 
   Widget _statusChip(ThemeData t, IconData icon, String label, Color color) {

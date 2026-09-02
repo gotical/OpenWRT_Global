@@ -284,6 +284,24 @@ class StorageService {
     await prefs.setString('device_names', jsonEncode(names));
   }
 
+  /// Удалить сразу несколько устройств из списка пользовательских имён.
+  static Future<int> removeDeviceNames(Iterable<String> macs) async {
+    final prefs = await SharedPreferences.getInstance();
+    final names = await loadDeviceNames();
+    var removed = 0;
+    for (final m in macs) {
+      final k = m.toLowerCase();
+      if (names.containsKey(k)) {
+        names.remove(k);
+        removed++;
+      }
+    }
+    if (removed > 0) {
+      await prefs.setString('device_names', jsonEncode(names));
+    }
+    return removed;
+  }
+
   static Future<String?> loadApiKey(String provider) async {
     // API-ключи AI — чувствительные данные → Keystore.
     try { return await _secure.read(key: 'api_key_$provider'); } catch (_) { return null; }
