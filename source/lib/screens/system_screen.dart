@@ -1138,51 +1138,113 @@ class _SystemScreenState extends State<SystemScreen> {
     }
     if (!mounted) return;
     Navigator.pop(context);
-    showDialog(context: context, builder: (ctx) => AlertDialog(
-       title: Text(_t('USB-устройства')),
-      content: SizedBox(width: double.maxFinite, child: SingleChildScrollView(
-        child: Column(mainAxisSize: MainAxisSize.min, children: devs.isEmpty
-           ? [Padding(padding: const EdgeInsets.symmetric(vertical: 24), child: Text(_t('USB-устройств не найдено')))]
-          : devs.map((d) => _UsbTile(
-              d: d,
-              onBrowse: () {
-                Navigator.pop(ctx);
-                Navigator.of(context).push(MaterialPageRoute(builder: (_) => UsbBrowserScreen(
-                  service: widget.service,
-                  startPath: (d['mount'] ?? '—') == '—' ? '/' : d['mount']!,
-                  devicePath: (d['dev'] ?? '').isEmpty ? null : d['dev'],
-                )));
-              },
-              onMount: () async {
-                final dev = d['dev'] ?? '';
-                if (dev.isEmpty) return;
-                // Показываем индикатор и пробуем смонтировать.
-                Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(_t('Подключение накопителя...'))));
-                String? mount;
-                try {
-                  mount = await widget.service.mountUsbDevice(dev);
-                } catch (e) {
-                  if (mounted) _snack('${_t('Ошибка')}: $e');
-                  return;
-                }
-                if (!mounted) return;
-                if (mount == null) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(_t('Не удалось подключить накопитель'))));
-                  return;
-                }
-                Navigator.of(context).push(MaterialPageRoute(builder: (_) => UsbBrowserScreen(
-                  service: widget.service,
-                  startPath: mount!,
-                  devicePath: dev,
-                )));
-              },
-            )).toList()),
-      )),
-      actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
-    ));
+
+    // Используем модальный bottom sheet вместо showDialog. Это убирает
+    // гонку навигации (push после pop dialog) и даёт больше места для
+    // отображения крупных кнопок «Открыть» / «Подключить».
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (bctx) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.7,
+        minChildSize: 0.4,
+        maxChildSize: 0.95,
+        builder: (_, scrollCtrl) => Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+              child: Row(children: [
+                const Icon(Icons.usb),
+                const SizedBox(width: 10),
+                Text(_t('USB-устройства'),
+                    style: Theme.of(bctx).textTheme.titleLarge),
+                const Spacer(),
+                Text('${devs.length}',
+                    style: Theme.of(bctx).textTheme.bodySmall),
+              ]),
+            ),
+            Expanded(
+              child: devs.isEmpty
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.usb_off, size: 56, color: Colors.grey),
+                            const SizedBox(height: 12),
+                            Text(_t('USB-устройств не найдено')),
+                            const SizedBox(height: 4),
+                            Text(_t('Подключите флешку/диск к USB-порту роутера'),
+                                style: Theme.of(bctx).textTheme.bodySmall,
+                                textAlign: TextAlign.center),
+                          ],
+                        ),
+                      ),
+                    )
+                  : ListView.builder(
+                      controller: scrollCtrl,
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                      itemCount: devs.length,
+                      itemBuilder: (_, i) => Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: _UsbTile(
+                          d: devs[i],
+                          onBrowse: () {
+                            Navigator.pop(bctx);
+                            Navigator.of(context).push(MaterialPageRoute(
+                                builder: (_) => UsbBrowserScreen(
+                                      service: widget.service,
+                                      startPath: (devs[i]['mount'] ?? '') == '—'
+                                          ? '/'
+                                          : devs[i]['mount']!,
+                                      devicePath: (devs[i]['dev'] ?? '').isEmpty
+                                          ? null
+                                          : devs[i]['dev'],
+                                    )));
+                          },
+                          onMount: () async {
+                            final dev = devs[i]['dev'] ?? '';
+                            if (dev.isEmpty) return;
+                            Navigator.pop(bctx);
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                duration: const Duration(seconds: 2),
+                                content:
+                                    Text('${_t('Подключение')}: $dev')));
+                            String? mount;
+                            try {
+                              mount = await widget.service
+                                  .mountUsbDevice(dev);
+                            } catch (e) {
+                              if (mounted) _snack('${_t('Ошибка')}: $e');
+                              return;
+                            }
+                            if (!mounted) return;
+                            if (mount == null) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                      duration: const Duration(seconds: 4),
+                                      content: Text(_t(
+                                          'Не удалось подключить: монтируйте раздел (например /dev/sda1), а не весь диск'))));
+                              return;
+                            }
+                            Navigator.of(context).push(MaterialPageRoute(
+                                builder: (_) => UsbBrowserScreen(
+                                      service: widget.service,
+                                      startPath: mount!,
+                                      devicePath: dev,
+                                    )));
+                          },
+                        ),
+                      ),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _runNmapScan() async {
@@ -1751,26 +1813,44 @@ class _UsbTile extends StatelessWidget {
       if (!browsable && isStorage && d['dev'] != null) AppStrings.of(context).text('не подключён'),
     ];
     final model = d['model'] ?? '';
-    return ListTile(
-      leading: Icon(icon, color: theme.colorScheme.primary),
-      title: Text(
-        [if (d['label'] != null && d['label']!.isNotEmpty) d['label']!, d['name']!].join(' '),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
+    final showAction = browsable || (isStorage && d['dev'] != null);
+    return Card(
+      margin: EdgeInsets.zero,
+      child: ListTile(
+        leading: Icon(icon, color: theme.colorScheme.primary),
+        title: Text(
+          [if (d['label'] != null && d['label']!.isNotEmpty) d['label']!, d['name']!].join(' '),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        subtitle: Text([model, if (model.isNotEmpty) ' • ', parts.join(' • ')].join().isEmpty
+            ? '—'
+            : [if (model.isNotEmpty) model, parts.join(' • ')].join(' • ')),
+        // Крупная кнопка-чип справа — сразу видно, что на устройство можно нажать
+        // и понятно, что произойдёт («Открыть» vs «Подключить»). Раньше была
+        // просто иконка — пользователи её не замечали.
+        trailing: showAction
+            ? Padding(
+                padding: const EdgeInsets.only(left: 4),
+                child: FilledButton.tonalIcon(
+                  onPressed: browsable ? onBrowse : (onMount ?? onBrowse),
+                  icon: Icon(browsable ? Icons.folder_open : Icons.link),
+                  label: Text(browsable
+                      ? AppStrings.of(context).text('Открыть')
+                      : AppStrings.of(context).text('Подключить')),
+                  style: FilledButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  ),
+                ),
+              )
+            : null,
+        onTap: browsable
+            ? onBrowse
+            : isStorage
+                ? (onMount ?? onBrowse)
+                : null,
       ),
-      subtitle: Text([model, if (model.isNotEmpty) ' • ', parts.join(' • ')].join().isEmpty
-          ? '—'
-          : [if (model.isNotEmpty) model, parts.join(' • ')].join(' • ')),
-      trailing: browsable
-          ? Icon(Icons.folder_open, color: theme.colorScheme.primary)
-          : (isStorage && d['dev'] != null)
-              ? Icon(Icons.link, color: theme.colorScheme.primary)
-              : null,
-      onTap: browsable
-          ? onBrowse
-          : isStorage
-              ? (onMount ?? onBrowse)
-              : null,
     );
   }
 }
