@@ -93,12 +93,17 @@ class OpenWrtManagerAppState extends State<OpenWrtManagerApp> {
 
   @override
   Widget build(BuildContext context) {
+    final isRtl = _locale != null && (_locale!.languageCode == 'ar' ||
+        _locale!.languageCode == 'he' || _locale!.languageCode == 'fa');
     return MaterialApp(
       title: 'OPENWRT - Global',
       debugShowCheckedModeBanner: false,
       locale: _locale,
       supportedLocales: AppStrings.supportedLocales,
       localizationsDelegates: GlobalMaterialLocalizations.delegates,
+      // RTL для арабского (и других арабопишущих языков в будущем).
+      builder: (ctx, child) =>
+          Directionality(textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr, child: child!),
       themeMode: _themeMode,
       theme: _light(),
       darkTheme: _dark(),
