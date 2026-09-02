@@ -1270,6 +1270,7 @@ class _SystemScreenState extends State<SystemScreen> {
                                       devicePath: dev,
                                     )));
                           },
+                          onLongAction: () => _showUsbDeviceMenu(bctx, devs[i], context),
                         ),
                       ),
                     ),
@@ -1300,6 +1301,220 @@ class _SystemScreenState extends State<SystemScreen> {
     }
     _snack('${_t('Смонтировано')}: ${mountedList.length}');
     setState(() {});
+  }
+
+  /// Контекстное меню USB-устройства: Открыть / Подключить / Отключить /
+  /// Форматировать. Показывается по длинному нажатию.
+  Future<void> _showUsbDeviceMenu(
+      BuildContext sheetCtx, Map<String, String> d, BuildContext hostCtx) async {
+    final dev = d['dev'] ?? '';
+    final mount = (d['mount'] ?? '') == '—' ? '' : (d['mount'] ?? '');
+    final browsable = d['browsable'] == '1';
+    final type = d['type'] ?? '';
+    final isStorage = type.contains('флешка') || type.contains('SSD') ||
+        type.contains('HDD') || type.contains('накопитель') || type == 'раздел';
+    if (!browsable && !(isStorage && dev.isNotEmpty)) return;
+    final choice = await showModalBottomSheet<String>(
+      context: sheetCtx,
+      showDragHandle: true,
+      builder: (mctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(8, 0, 8, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+                child: Row(children: [
+                  const Icon(Icons.usb),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(_t('Устройство'),
+                        style: Theme.of(mctx).textTheme.titleMedium),
+                  ),
+                  Text(dev, style: Theme.of(mctx).textTheme.bodySmall),
+                ]),
+              ),
+              if (browsable)
+                ListTile(
+                  leading: const Icon(Icons.folder_open),
+                  title: Text(_t('Открыть файловый менеджер')),
+                  subtitle: Text(mount, maxLines: 1, overflow: TextOverflow.ellipsis),
+                  onTap: () => Navigator.pop(mctx, 'open'),
+                ),
+              if (!browsable && isStorage && dev.isNotEmpty)
+                ListTile(
+                  leading: const Icon(Icons.link),
+                  title: Text(_t('Подключить')),
+                  subtitle: Text(dev, maxLines: 1, overflow: TextOverflow.ellipsis),
+                  onTap: () => Navigator.pop(mctx, 'mount'),
+                ),
+              if (browsable && dev.isNotEmpty)
+                ListTile(
+                  leading: const Icon(Icons.link_off),
+                  title: Text(_t('Отключить (размонтировать)')),
+                  subtitle: Text('$dev  •  $mount',
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                  onTap: () => Navigator.pop(mctx, 'unmount'),
+                ),
+              if (isStorage && dev.isNotEmpty)
+                ListTile(
+                  leading: Icon(Icons.format_color_fill,
+                      color: Colors.red.shade700),
+                  title: Text(_t('Форматировать…'),
+                      style: TextStyle(color: Colors.red.shade700)),
+                  subtitle: Text(
+                      _t('Удаляет все данные на ') + dev,
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                  onTap: () => Navigator.pop(mctx, 'format'),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (choice == null || !mounted) return;
+    switch (choice) {
+      case 'open':
+        Navigator.of(hostCtx, rootNavigator: true).push(MaterialPageRoute(
+          builder: (_) => UsbBrowserScreen(
+            service: widget.service,
+            startPath: mount.isEmpty ? '/' : mount,
+            devicePath: dev.isEmpty ? null : dev,
+          ),
+        ));
+        Navigator.pop(sheetCtx);
+        break;
+      case 'mount':
+        Navigator.pop(sheetCtx);
+        ScaffoldMessenger.of(hostCtx).showSnackBar(SnackBar(
+            duration: const Duration(seconds: 2),
+            content: Text('${_t('Подключение')}: $dev')));
+        try {
+          final m = await widget.service.mountUsbDevice(dev);
+          if (!mounted) return;
+          if (m == null) {
+            _snack(_t('Не удалось подключить (нет подходящего раздела)'));
+            return;
+          }
+          _snack('${_t('Подключено')}: $m', ok: true);
+          Future.delayed(const Duration(milliseconds: 600), () {
+            if (mounted) _showUsbDevices();
+          });
+        } catch (e) {
+          _snack('${_t('Ошибка')}: $e');
+        }
+        break;
+      case 'unmount':
+        Navigator.pop(sheetCtx);
+        try {
+          await widget.service.unmountUsbDevice(dev);
+          if (!mounted) return;
+          _snack(_t('Отключено'), ok: true);
+          Future.delayed(const Duration(milliseconds: 600), () {
+            if (mounted) _showUsbDevices();
+          });
+        } catch (e) {
+          _snack('${_t('Ошибка')}: $e');
+        }
+        break;
+      case 'format':
+        Navigator.pop(sheetCtx);
+        await _formatUsb(dev);
+        break;
+    }
+  }
+
+  /// Диалог выбора ФС + форматирование.
+  Future<void> _formatUsb(String dev) async {
+    final fstype = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('${_t('Форматировать')} $dev'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Text(_t('Все данные на устройстве будут удалены.'),
+                  style: TextStyle(color: Colors.red.shade700)),
+            ),
+            ...OpenWrtService.supportedFileSystems.entries.map(
+              (e) => RadioListTile<String>(
+                title: Text(e.value.split(' — ').first),
+                subtitle: Text(e.value.contains(' — ')
+                    ? e.value.split(' — ').skip(1).join(' — ')
+                    : ''),
+                value: e.key,
+                // Дай defaultValue явно:
+                groupValue: null,
+                onChanged: (v) => Navigator.pop(ctx, v),
+                dense: true,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(_t('Отмена')),
+          ),
+        ],
+      ),
+    );
+    if (fstype == null) return;
+    // Подтверждение.
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx2) => AlertDialog(
+        title: Text(_t('Точно форматировать?')),
+        content: Text('${_t('Устройство')}: $dev\n'
+            '${_t('Файловая система')}: $fstype\n\n'
+            '${_t('Все данные будут удалены. Это действие нельзя отменить.')}'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx2, false),
+            child: Text(_t('Отмена')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx2, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: Text(_t('Форматировать')),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    // Прогресс.
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx3) => const AlertDialog(
+        content: SizedBox(
+          height: 80,
+          child: Row(children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 20),
+            Expanded(child: Text('Идёт форматирование...', softWrap: true)),
+          ]),
+        ),
+      ),
+    );
+    try {
+      await widget.service.formatDevice(dev, fstype);
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop(); // закрыть прогресс
+      _snack('${_t('Отформатировано')}: $dev → $fstype', ok: true);
+      Future.delayed(const Duration(milliseconds: 600), () {
+        if (mounted) _showUsbDevices();
+      });
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop(); // закрыть прогресс
+      _snack('${_t('Ошибка форматирования')}: $e');
+    }
   }
 
   Future<void> _runNmapScan() async {
@@ -1841,8 +2056,14 @@ class _UsbTile extends StatelessWidget {
   final Map<String, String> d;
   final VoidCallback onBrowse; // когда уже подключено
   final VoidCallback? onMount; // подключить (размонтированный накопитель)
+  final VoidCallback? onLongAction; // долгое нажатие → меню Open/Fmt/Unmount
 
-  const _UsbTile({required this.d, required this.onBrowse, this.onMount});
+  const _UsbTile({
+    required this.d,
+    required this.onBrowse,
+    this.onMount,
+    this.onLongAction,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1905,6 +2126,10 @@ class _UsbTile extends StatelessWidget {
             : isStorage
                 ? (onMount ?? onBrowse)
                 : null,
+        onLongPress: (onLongAction != null &&
+                (browsable || (isStorage && d['dev'] != null)))
+            ? onLongAction
+            : null,
       ),
     );
   }
