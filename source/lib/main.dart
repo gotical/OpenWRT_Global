@@ -35,8 +35,7 @@ void main() async {
   }
   // Инициализация уведомлений.
   await NotificationService.init();
-  // Загружаем версию из pubspec.yaml (используется в AppBar, About, UpdateService).
-  await AppVersion.load();
+  // Текущая версия (используется в AppBar, About, UpdateService).
   UpdateService.setCurrentVersion(AppVersion.version);
   if (await StorageService.loadSecureScreen()) {
     SecureScreen.enable();
