@@ -27,9 +27,9 @@ void main() async {
     return true;
   };
   setupDi();
-  // Инициализация фоновой задачи мониторинга.
+  // Инициализация фоновых задач (мониторинг роутера + проверка обновлений приложения).
   try {
-    await Workmanager().initialize(routerMonitorCallback);
+    await Workmanager().initialize(workmanagerCallbackDispatcher);
   } catch (e) {
     AppLogger.w('WorkManager init failed: $e');
   }
@@ -37,6 +37,12 @@ void main() async {
   await NotificationService.init();
   // Текущая версия (используется в AppBar, About, UpdateService).
   UpdateService.setCurrentVersion(AppVersion.version);
+  // Регистрация ежедневной проверки обновлений (если источник != disabled).
+  try {
+    await UpdateService.schedulePeriodicCheck();
+  } catch (e) {
+    AppLogger.w('UpdateService: initial schedule failed: $e');
+  }
   if (await StorageService.loadSecureScreen()) {
     SecureScreen.enable();
   } else {
@@ -252,4 +258,34 @@ class OpenWrtManagerAppState extends State<OpenWrtManagerApp> {
       ),
     );
   }
+}
+
+/// Диспетчер фоновых задач WorkManager.
+///
+/// Workmanager.initialize() принимает ОДИН callback. Этот диспетчер
+/// маршрутизирует задачу по имени — роутер-мониторинг или проверка
+/// обновлений приложения.
+@pragma('vm:entry-point')
+void workmanagerCallbackDispatcher() {
+  Workmanager().executeTask((task, inputData) async {
+    switch (task) {
+      case RouterMonitorService.taskName:
+        try {
+          return await RouterMonitorService.checkOnce();
+        } catch (e) {
+          AppLogger.w('WM router_monitor error: $e');
+          return false;
+        }
+      case UpdateService.taskName:
+        try {
+          return await UpdateService.checkInBackground();
+        } catch (e) {
+          AppLogger.w('WM app_update_check error: $e');
+          return false;
+        }
+      default:
+        AppLogger.w('WM unknown task: $task');
+        return true;
+    }
+  });
 }

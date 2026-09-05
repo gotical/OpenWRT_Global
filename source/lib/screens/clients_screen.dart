@@ -458,6 +458,7 @@ class ClientsScreenState extends State<ClientsScreen> {
           physics: const BouncingScrollPhysics(),
           slivers: [
             SliverAppBar.large(
+              automaticallyImplyLeading: false,
               title: Text(s.clients),
               actions: [
                 IconButton(
@@ -465,7 +466,6 @@ class ClientsScreenState extends State<ClientsScreen> {
                   onPressed: () => setState(() => treeView = !treeView),
                    tooltip: _t('Вид'),
                 ),
-                IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
                 if (filtered.any((c) => !c.active))
                   IconButton(
                     tooltip: _showOffline ? _t('Скрыть не в сети') : _t('Показать не в сети'),

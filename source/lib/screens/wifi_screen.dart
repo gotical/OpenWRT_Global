@@ -700,10 +700,8 @@ class _WifiScreenState extends State<WifiScreen> {
           physics: const BouncingScrollPhysics(),
           slivers: [
             SliverAppBar.large(
+              automaticallyImplyLeading: false,
               title: Text(s.wifi),
-              actions: [
-                IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
-              ],
             ),
             if (loading)
               const SliverFillRemaining(child: Center(child: CircularProgressIndicator()))

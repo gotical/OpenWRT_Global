@@ -899,19 +899,6 @@ ListTile(
                     ],
                   ),
                 ),
-                TextButton.icon(
-                  onPressed: _retryConnection,
-                  icon: const Icon(Icons.refresh, size: 16),
-                  label: Text(
-                    s.text('Повторить'),
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                  style: TextButton.styleFrom(
-                    foregroundColor: Colors.orange.shade900,
-                    minimumSize: const Size(0, 32),
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                  ),
-                ),
               ],
             ),
           ),

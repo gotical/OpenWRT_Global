@@ -412,6 +412,7 @@ class _VpnScreenState extends State<VpnScreen> {
           physics: const BouncingScrollPhysics(),
           slivers: [
             SliverAppBar.large(
+              automaticallyImplyLeading: false,
               title: Text(s.vpn),
               actions: [
                 PopupMenuButton<String>(
@@ -424,7 +425,6 @@ class _VpnScreenState extends State<VpnScreen> {
                     if (v == 'add_ipsec') _showIpsecDialog();
                     if (v == 'add_ovpn') _showOvpnImport();
                     if (v == 'import') _showImportDialog();
-                    if (v == 'refresh') _load();
                   },
                   itemBuilder: (ctx) => [
                     const PopupMenuItem(value: 'add_wg', child: ListTile(leading: Icon(Icons.security), title: Text('WireGuard / AmneziaWG'))),
@@ -434,7 +434,6 @@ class _VpnScreenState extends State<VpnScreen> {
                     const PopupMenuItem(value: 'add_pptp', child: ListTile(leading: Icon(Icons.cable), title: Text('PPTP'))),
                     const PopupMenuItem(value: 'add_sstp', child: ListTile(leading: Icon(Icons.https), title: Text('SSTP'))),
                     PopupMenuItem(value: 'import', child: ListTile(leading: const Icon(Icons.file_open), title: Text(s.text('Импорт .conf (WG)')))),
-                    PopupMenuItem(value: 'refresh', child: ListTile(leading: const Icon(Icons.refresh), title: Text(s.text('Обновить')))),
                   ],
                 ),
               ],

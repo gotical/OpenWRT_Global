@@ -1,7 +1,10 @@
 import 'dart:convert';
 
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:workmanager/workmanager.dart';
 
 import 'app_logger.dart';
 
@@ -54,13 +57,24 @@ class UpdateInfo {
 /// - Сайт rybinsklab.ru/openwrt/version.json (где админка публикует версии)
 ///
 /// По умолчанию — GitHub. Чтобы переключить — Settings → Источник обновлений.
+///
+/// Периодическая проверка раз в сутки через WorkManager (`schedulePeriodicCheck`).
 class UpdateService {
   static const String _sourceKey = 'update_source';
   static const String _lastCheckKey = 'update_last_check';
   static const String _skippedVersionKey = 'update_skipped_version';
+  static const String _lastNotifiedVersionKey = 'update_last_notified';
+
+  /// Имя задачи WorkManager для ежедневной проверки обновлений.
+  static const String taskName = 'openwrt_app_update_check';
+
+  /// Интервал проверки (минимум WorkManager — 15 минут, раз в сутки нормально).
+  static const Duration _checkInterval = Duration(hours: 24);
+
+  /// Уникальное имя периодической задачи.
+  static const String _taskUniqueName = 'app_update_check_task';
 
   /// GitHub API endpoint для последнего релиза.
-  /// Repository указывается в _getSourceConfig.
   static const String _githubApiBase = 'https://api.github.com/repos';
 
   /// Сайт с JSON-файлом последней версии (публикуется через админку).
@@ -90,9 +104,16 @@ class UpdateService {
   }
 
   /// Устанавливает источник.
+  /// Если выбрано [UpdateSource.disabled] — отменяет периодическую задачу.
+  /// Иначе — регистрирует/обновляет периодическую задачу.
   static Future<void> setSource(UpdateSource s) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_sourceKey, s.value);
+    if (s == UpdateSource.disabled) {
+      await cancelPeriodicCheck();
+    } else {
+      await schedulePeriodicCheck();
+    }
   }
 
   /// Проверяет обновления через выбранный источник.
@@ -134,7 +155,7 @@ class UpdateService {
   }
 
   /// Проверка через GitHub API.
-  /// Использует public endpoint — лимиты 60 запросов/час.
+  /// Использует public endpoint — лимиты 60 запросов/час (с IP).
   static Future<UpdateInfo?> _checkGithub() async {
     final url = Uri.parse('$_githubApiBase/gotical/OpenWRT_Global/releases/latest');
     final resp = await http.get(
@@ -239,11 +260,88 @@ class UpdateService {
     await prefs.setString(_skippedVersionKey, version);
   }
 
-  /// Открыть ссылку на обновление через url_launcher.
-  static Future<void> openDownload(String url) async {
-    // Реализация вызова url_launcher — упрощено, в реальном коде:
-    // import 'package:url_launcher/url_launcher.dart';
-    // await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-    AppLogger.i('UpdateService: open download $url');
+  /// Открыть ссылку на обновление через внешний браузер.
+  /// Если URL ведёт на .apk — Android сам предложит скачать.
+  static Future<bool> openDownload(String url) async {
+    if (url.isEmpty) return false;
+    try {
+      final uri = Uri.parse(url);
+      return await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (e) {
+      AppLogger.w('UpdateService: openDownload failed: $e');
+      return false;
+    }
+  }
+
+  /// Регистрирует периодическую проверку обновлений через WorkManager.
+  /// Безопасно вызывать многократно — заменит существующую задачу.
+  static Future<void> schedulePeriodicCheck() async {
+    try {
+      final src = await getSource();
+      if (src == UpdateSource.disabled) return;
+      await Workmanager().registerPeriodicTask(
+        _taskUniqueName,
+        taskName,
+        frequency: _checkInterval,
+        constraints: Constraints(networkType: NetworkType.connected),
+        existingWorkPolicy: ExistingWorkPolicy.replace,
+        backoffPolicy: BackoffPolicy.exponential,
+        backoffPolicyDelay: const Duration(minutes: 30),
+      );
+      AppLogger.i('UpdateService: periodic check scheduled (${_checkInterval.inHours}h, source=${src.value})');
+    } catch (e) {
+      AppLogger.w('UpdateService: schedule failed: $e');
+    }
+  }
+
+  /// Отменяет периодическую проверку.
+  static Future<void> cancelPeriodicCheck() async {
+    try {
+      await Workmanager().cancelByUniqueName(_taskUniqueName);
+      AppLogger.i('UpdateService: periodic check cancelled');
+    } catch (_) {}
+  }
+
+  /// Выполняет проверку в фоне (вызывается из WorkManager).
+  /// Не показывает диалоги — только уведомление.
+  /// Возвращает true если задача завершилась успешно.
+  static Future<bool> checkInBackground() async {
+    try {
+      final info = await checkForUpdate();
+      if (info == null) return true;
+      // Не спамим — уведомляем только если ещё не уведомляли про эту версию.
+      final prefs = await SharedPreferences.getInstance();
+      final lastNotified = prefs.getString(_lastNotifiedVersionKey);
+      if (lastNotified == info.latestVersion) return true;
+      await prefs.setString(_lastNotifiedVersionKey, info.latestVersion);
+      // Показываем уведомление.
+      await _showUpdateNotification(info);
+      return true;
+    } catch (e) {
+      AppLogger.w('UpdateService: background check failed: $e');
+      return false;
+    }
+  }
+
+  static Future<void> _showUpdateNotification(UpdateInfo info) async {
+    try {
+      const androidDetails = AndroidNotificationDetails(
+        'openwrt_app_update',
+        'Обновления приложения',
+        channelDescription: 'Уведомления о новых версиях OPENWRT - Global',
+        importance: Importance.high,
+        priority: Priority.high,
+        ticker: 'Доступно обновление',
+      );
+      await FlutterLocalNotificationsPlugin().show(
+        id: 2001,
+        title: 'Доступно обновление ${info.latestVersion}',
+        body: 'Откройте приложение, чтобы скачать.',
+        notificationDetails: const NotificationDetails(android: androidDetails),
+        payload: info.downloadUrl,
+      );
+    } catch (e) {
+      AppLogger.w('UpdateService: notification failed: $e');
+    }
   }
 }

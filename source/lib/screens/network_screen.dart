@@ -338,6 +338,7 @@ wifi reload
         child: CustomScrollView(
           slivers: [
             SliverAppBar.large(
+              automaticallyImplyLeading: false,
               title: Text(s.network),
               actions: [
                 PopupMenuButton<String>(onSelected: (v) { if (v == 'speedtest') _speedtest(); if (v == 'ping') _ping(); if (v == 'wan') _setupWan(); if (v == 'topology') _showTopology(); },
@@ -348,7 +349,6 @@ wifi reload
                     const PopupMenuItem(value: 'ping', child: ListTile(leading: Icon(Icons.network_ping), title: Text('Ping'))),
                   ],
                 ),
-                IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
               ],
             ),
             if (loading)

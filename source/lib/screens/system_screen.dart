@@ -606,6 +606,22 @@ class _SystemScreenState extends State<SystemScreen> {
   Future<void> _setupUpdateSource() async {
     final current = await UpdateService.getSource();
     UpdateSource selected = current;
+    final lastTs = await UpdateService.lastCheckTs();
+    String lastCheckText = _t('Не проверялось');
+    if (lastTs != null) {
+      final dt = DateTime.fromMillisecondsSinceEpoch(lastTs * 1000);
+      final ageMin = DateTime.now().difference(dt).inMinutes;
+      if (ageMin < 1) {
+        lastCheckText = _t('только что');
+      } else if (ageMin < 60) {
+        lastCheckText = '$ageMin ${_t('мин назад')}';
+      } else if (ageMin < 1440) {
+        lastCheckText = '${ageMin ~/ 60} ${_t('ч назад')}';
+      } else {
+        lastCheckText = '${ageMin ~/ 1440} ${_t('дн назад')}';
+      }
+    }
+    if (!mounted) return;
     await showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -620,7 +636,15 @@ class _SystemScreenState extends State<SystemScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(_t('Откуда проверять наличие новых версий приложения:')),
-              const SizedBox(height: 12),
+              const SizedBox(height: 4),
+              Text(
+                '${_t('Последняя проверка')}: $lastCheckText',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 8),
               RadioListTile<UpdateSource>(
                 title: const Text('GitHub'),
                 subtitle: Text(_t('Релизы в репозитории gotical/OpenWRT_Global')),
@@ -656,6 +680,8 @@ class _SystemScreenState extends State<SystemScreen> {
                     messenger.showSnackBar(
                       SnackBar(content: Text('${_t('Источник обновлений')}: ${selected.label}')),
                     );
+                    // Обновить подпись карточки (subtitle) на экране.
+                    setState(() {});
                   }
                 }
               },
@@ -1971,8 +1997,8 @@ class _SystemScreenState extends State<SystemScreen> {
           physics: const BouncingScrollPhysics(),
           slivers: [
             SliverAppBar.large(
+              automaticallyImplyLeading: false,
                title: Text(s.system),
-              actions: [IconButton(onPressed: _load, icon: const Icon(Icons.refresh))],
             ),
             if (loading)
               const SliverFillRemaining(child: Center(child: CircularProgressIndicator()))
@@ -2057,7 +2083,15 @@ class _SystemScreenState extends State<SystemScreen> {
                     const SizedBox(height: 12),
                     _ActionCard(icon: Icons.notifications, title: s.text('Уведомления'), subtitle: s.text('мониторинг роутера'), onTap: _setupNotifications),
                     const SizedBox(height: 12),
-                    _ActionCard(icon: Icons.system_update_outlined, title: s.text('Источник обновлений'), subtitle: s.text('GitHub / сайт / отключено'), onTap: _setupUpdateSource),
+                    FutureBuilder<UpdateSource>(
+                      future: UpdateService.getSource(),
+                      builder: (ctx, snap) => _ActionCard(
+                        icon: Icons.system_update_outlined,
+                        title: s.text('Источник обновлений'),
+                        subtitle: snap.hasData ? snap.data!.label : s.text('GitHub / сайт / отключено'),
+                        onTap: _setupUpdateSource,
+                      ),
+                    ),
                     const SizedBox(height: 12),
                     _ActionCard(icon: Icons.refresh_outlined, title: s.text('Проверить обновления'), subtitle: s.text('через выбранный источник'), onTap: _checkForUpdates),
                     const SizedBox(height: 12),

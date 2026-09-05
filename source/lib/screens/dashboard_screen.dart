@@ -228,7 +228,7 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
     final t = Theme.of(context);
     final s = AppStrings.of(context);
     return RefreshIndicator(onRefresh: _load, child: CustomScrollView(physics: const BouncingScrollPhysics(), slivers: [
-       SliverAppBar.large(title: Text(s.overview), actions: [IconButton(onPressed: _load, icon: const Icon(Icons.refresh))]),
+       SliverAppBar.large(automaticallyImplyLeading: false, title: Text(s.overview)),
       if (loading)
         SliverPadding(
           padding: const EdgeInsets.all(16),

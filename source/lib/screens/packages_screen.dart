@@ -201,10 +201,10 @@ class _PackagesScreenState extends State<PackagesScreen> {
         body: NestedScrollView(
           headerSliverBuilder: (ctx, innerBoxIsScrolled) => [
             SliverAppBar.large(
+              automaticallyImplyLeading: false,
               title: Text(s.packages),
               actions: [
                 IconButton(onPressed: _updateLists, icon: const Icon(Icons.download)),
-                IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
               ],
               bottom: TabBar(
                 onTap: (i) => setState(() => _tabIndex = i),
