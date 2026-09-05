@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../l10n/app_strings.dart';
 import '../models/router_connection.dart';
+import '../services/discovery_service.dart';
 import '../services/storage_service.dart';
 import '../services/openwrt_service.dart';
 import 'home_screen.dart';
@@ -402,6 +405,18 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                   Text('Global', style: t.textTheme.headlineLarge?.copyWith(fontWeight: FontWeight.w300, color: t.colorScheme.primary)),
                   const SizedBox(height: 12),
                    Text(s.text('Управляйте роутером'), style: t.textTheme.bodyLarge?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+                  const SizedBox(height: 20),
+                  OutlinedButton.icon(
+                    onPressed: _showDiscovery,
+                    icon: const Icon(Icons.lan_outlined, size: 20),
+                    label: Text(s.text('Найти роутеры в сети')),
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 48),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                  ),
                 ]),
               ),
             ),
@@ -463,5 +478,280 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       ),
        floatingActionButton: routers.isEmpty ? null : FloatingActionButton.extended(onPressed: () => _sheet(), icon: const Icon(Icons.add), label: Text(s.addRouter)),
     );
+  }
+
+  /// Показывает bottom sheet с авто-обнаружением роутеров в локальной сети.
+  Future<void> _showDiscovery() async {
+    final s = AppStrings.of(context);
+    final found = <DiscoveredRouter>[];
+    var scanning = true;
+    var error = '';
+    StreamSubscription? sub;
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSt) {
+          // Запускаем сканирование при первом построении.
+          if (sub == null) {
+            sub = DiscoveryService().scan().listen(
+              (r) {
+                setSt(() {
+                  if (!found.any((x) => x.host == r.host)) found.add(r);
+                });
+              },
+              onError: (e) {
+                setSt(() {
+                  error = e.toString();
+                  scanning = false;
+                });
+              },
+              onDone: () {
+                setSt(() => scanning = false);
+              },
+            );
+          }
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Theme.of(ctx).colorScheme.outlineVariant,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Icon(Icons.lan_outlined,
+                        color: Theme.of(ctx).colorScheme.primary),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        s.text('Найти роутеры в сети'),
+                        style: Theme.of(ctx)
+                            .textTheme
+                            .titleLarge
+                            ?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    if (scanning)
+                      const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2.5),
+                      )
+                    else
+                      IconButton(
+                        icon: const Icon(Icons.refresh),
+                        tooltip: s.text('Сканировать снова'),
+                        onPressed: () {
+                          setSt(() {
+                            found.clear();
+                            scanning = true;
+                            error = '';
+                          });
+                          sub?.cancel();
+                          sub = DiscoveryService().scan().listen(
+                            (r) {
+                              setSt(() {
+                                if (!found.any((x) => x.host == r.host)) {
+                                  found.add(r);
+                                }
+                              });
+                            },
+                            onError: (e) {
+                              setSt(() {
+                                error = e.toString();
+                                scanning = false;
+                              });
+                            },
+                            onDone: () {
+                              setSt(() => scanning = false);
+                            },
+                          );
+                        },
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  scanning
+                      ? s.text('Сканирование подсети...')
+                      : '${s.text('Найдено роутеров:')} ${found.length}',
+                  style: TextStyle(
+                    color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                    fontSize: 13,
+                  ),
+                ),
+                if (error.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Theme.of(ctx).colorScheme.errorContainer,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      '${s.text('Не удалось определить локальный IP')}\n${s.text('Убедитесь, что вы подключены к Wi-Fi роутера')}',
+                      style: TextStyle(
+                        color: Theme.of(ctx).colorScheme.onErrorContainer,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 12),
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.of(ctx).size.height * 0.5,
+                  ),
+                  child: found.isEmpty && !scanning
+                      ? Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Column(
+                            children: [
+                              Icon(
+                                Icons.search_off_outlined,
+                                size: 48,
+                                color: Theme.of(ctx).colorScheme.outline,
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                s.text('Ничего не найдено'),
+                                style: Theme.of(ctx).textTheme.titleSmall,
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                s.text('Проверьте, что вы в одной сети с роутером и SSH открыт (порт 22)'),
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Theme.of(ctx)
+                                      .colorScheme
+                                      .onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : ListView.separated(
+                          shrinkWrap: true,
+                          itemCount: found.length,
+                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemBuilder: (_, i) {
+                            final r = found[i];
+                            return ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: CircleAvatar(
+                                backgroundColor: r.likelyOpenWrt
+                                    ? Theme.of(ctx)
+                                        .colorScheme
+                                        .primaryContainer
+                                    : Theme.of(ctx)
+                                        .colorScheme
+                                        .surfaceContainerHighest,
+                                child: Icon(
+                                  Icons.router,
+                                  color: r.likelyOpenWrt
+                                      ? Theme.of(ctx)
+                                          .colorScheme
+                                          .onPrimaryContainer
+                                      : Theme.of(ctx).colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                              title: Text(
+                                r.suggestedName,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w600),
+                              ),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('${r.host}:${r.port}'),
+                                  if (r.sshBanner != null)
+                                    Text(
+                                      r.sshBanner!,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontFamily: 'monospace',
+                                        color: Theme.of(ctx)
+                                            .colorScheme
+                                            .onSurfaceVariant,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  if (r.likelyOpenWrt)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 2),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 6, vertical: 1),
+                                        decoration: BoxDecoration(
+                                          color: Colors.green
+                                              .withValues(alpha: 0.15),
+                                          borderRadius:
+                                              BorderRadius.circular(4),
+                                        ),
+                                        child: Text(
+                                          s.text('Вероятно OpenWrt'),
+                                          style: const TextStyle(
+                                            fontSize: 10,
+                                            color: Colors.green,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                              trailing: FilledButton.tonal(
+                                onPressed: () {
+                                  Navigator.of(ctx).pop();
+                                  _useDiscovered(r);
+                                },
+                                child: Text(s.text('Использовать')),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+                const SizedBox(height: 8),
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('Закрыть'),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+    await sub?.cancel();
+  }
+
+  /// Заполняет форму данными из обнаруженного роутера.
+  void _useDiscovered(DiscoveredRouter r) {
+    _name.text = r.suggestedName;
+    _host.text = r.host;
+    _port.text = r.port.toString();
+    _user.text = 'root';
+    _pass.clear();
+    _host2.clear();
+    _useKey = false;
+    _sheet();
   }
 }

@@ -5,9 +5,11 @@ import 'package:intl/intl.dart';
 import '../l10n/app_strings.dart';
 import '../models/system_info.dart';
 import '../services/error_handler.dart';
+import '../services/offline_cache.dart';
 import '../services/openwrt_service.dart';
 import '../widgets/app_skeleton.dart';
 import '../widgets/info_tile.dart';
+import 'home_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   final OpenWrtService service;
@@ -39,8 +41,41 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _showCacheFirst();
     _load();
     _startTimer();
+  }
+
+  /// Показывает кешированные данные МГНОВЕННО, без спиннера,
+  /// чтобы UI не "мигал" при загрузке.
+  Future<void> _showCacheFirst() async {
+    final key = OfflineCacheService.hostKey(
+      _host(),
+      _port(),
+      _username(),
+    );
+    final cached = await OfflineCacheService.loadSystemInfo(key);
+    if (!mounted || cached == null) return;
+    setState(() {
+      info = cached;
+      loading = false;
+    });
+  }
+
+  String _host() => widget.service.config.host;
+  int _port() => widget.service.config.port;
+  String _username() => widget.service.config.username;
+
+  /// Уведомляет родительский HomeScreen о том, что данные обновлены,
+  /// чтобы индикатор Online/Offline в AppBar/Drawer переключился на "Online".
+  void _notifyUpdated() {
+    final state = context.findAncestorStateOfType<State<HomeScreen>>();
+    if (state != null) {
+      try {
+        // ignore: avoid_dynamic_calls
+        (state as dynamic).markDataUpdated();
+      } catch (_) {}
+    }
   }
 
   @override
@@ -75,6 +110,14 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
       if (!widget.service.isConnected) await widget.service.connect();
       final d = await widget.service.fetchSystemInfo();
       _update(d);
+      // Сохраняем в оффлайн-кеш после успешной загрузки.
+      // ignore: discarded_futures
+      OfflineCacheService.saveSystemInfo(
+        OfflineCacheService.hostKey(_host(), _port(), _username()),
+        d,
+      );
+      // Уведомляем HomeScreen, что данные обновились.
+      _notifyUpdated();
 
       int w = 0, l = 0;
       try {

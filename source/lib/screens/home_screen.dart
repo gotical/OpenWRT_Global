@@ -12,6 +12,8 @@ import 'network_screen.dart';
 import 'vpn_screen.dart';
 import 'clients_screen.dart';
 import 'packages_screen.dart';
+import 'dart:async';
+
 import 'system_screen.dart';
 import 'wifi_screen.dart';
 import 'login_screen.dart';
@@ -19,6 +21,8 @@ import 'terminal_screen.dart';
 import 'mac_changer_screen.dart';
 import 'wps_audit_screen.dart';
 import 'firewall_screen.dart';
+import '../services/offline_cache.dart';
+import '../widgets/connection_dot.dart';
 
 class HomeScreen extends StatefulWidget {
   final RouterConnection config;
@@ -36,6 +40,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   bool _checkedDeps = false;
   bool _hideNonFunctional = false;
   bool _timeSyncEnabled = true;
+  /// True если в данный момент нет SSH-соединения и используется кеш.
+  bool _offlineMode = false;
+  /// Timestamp последнего успешного обновления данных (Unix seconds).
+  int? _lastDataTs;
+  Timer? _offlineCheckTimer;
 
   List<NavigationDestination> get destinations {
     final s = AppStrings.of(context);
@@ -67,6 +76,57 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     ClientMonitor.instance.onClientConnected = _onClientConnected;
     ClientMonitor.instance.start(service);
     _autoSyncTime();
+    _loadCacheTimestamp();
+    // Проверяем статус SSH каждые 5 секунд для баннера оффлайн-режима.
+    _offlineCheckTimer = Timer.periodic(
+      const Duration(seconds: 5),
+      (_) => _checkOfflineState(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _offlineCheckTimer?.cancel();
+    ClientMonitor.instance.stop();
+    pageController.dispose();
+    super.dispose();
+  }
+
+  String get _cacheKey => OfflineCacheService.hostKey(
+        widget.config.host,
+        widget.config.port,
+        widget.config.username,
+      );
+
+  Future<void> _loadCacheTimestamp() async {
+    final ts = await OfflineCacheService.lastUpdated(_cacheKey, 'system');
+    if (!mounted) return;
+    setState(() {
+      _lastDataTs = ts != null
+          ? ts.millisecondsSinceEpoch ~/ 1000
+          : null;
+    });
+  }
+
+  /// Обновляет индикатор оффлайн-режима. SSH может оборваться в любой момент,
+  /// поэтому периодически сверяемся.
+  void _checkOfflineState() {
+    if (!mounted) return;
+    final wasOffline = _offlineMode;
+    final isOffline = !service.isConnected;
+    if (wasOffline != isOffline) {
+      setState(() => _offlineMode = isOffline);
+    }
+  }
+
+  /// Помечает, что данные только что обновлены с роутера.
+  /// Сохраняет timestamp — используется для отображения "обновлено X мин назад".
+  void markDataUpdated() {
+    if (!mounted) return;
+    setState(() {
+      _lastDataTs = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      _offlineMode = false;
+    });
   }
 
   /// Авто-синхронизация времени роутера с телефоном при входе
@@ -348,12 +408,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
-  @override
-  void dispose() {
-    ClientMonitor.instance.stop();
-    pageController.dispose();
-    super.dispose();
-  }
+  // Старый dispose удалён — логика остановки таймера/монитора/контроллера
+  // перенесена в верхний dispose().
 
   void _showConnLogDialog(BuildContext outerCtx) {
     final s = AppStrings.of(outerCtx);
@@ -488,6 +544,33 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final body = Scaffold(
+      appBar: AppBar(
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                widget.config.name,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 8),
+            ConnectionDot(
+              online: !_offlineMode,
+              cachedAgeSec: _lastDataTs == null
+                  ? null
+                  : DateTime.now().millisecondsSinceEpoch ~/ 1000 - _lastDataTs!,
+              onRetry: _retryConnection,
+            ),
+          ],
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Повторить подключение',
+            onPressed: _retryConnection,
+          ),
+        ],
+      ),
       drawer: Drawer(
         child: SafeArea(
           child: Column(
@@ -503,7 +586,24 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   children: [
                     Image.asset('assets/icon/router_icon.png', width: 64, height: 64),
                     const SizedBox(height: 16),
-                    Text(widget.config.name, style: theme.textTheme.titleLarge?.copyWith(color: Colors.white, fontWeight: FontWeight.bold)),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            widget.config.name,
+                            style: theme.textTheme.titleLarge?.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        ConnectionDot(
+                          online: !_offlineMode,
+                          cachedAgeSec: _lastDataTs == null
+                              ? null
+                              : DateTime.now().millisecondsSinceEpoch ~/ 1000 - _lastDataTs!,
+                          onRetry: _retryConnection,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
                     Text('${widget.config.username}@${widget.config.host}', style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white70)),
                   ],
                 ),
@@ -679,18 +779,25 @@ ListTile(
           ),
         ),
       ),
-      body: PageView(
-        controller: pageController,
-        onPageChanged: _onPageChanged,
-        physics: const BouncingScrollPhysics(),
+      body: Column(
         children: [
-          DashboardScreen(service: service),
-          NetworkScreen(service: service),
-          WifiScreen(service: service),
-          VpnScreen(service: service),
-          ClientsScreen(service: service),
-          PackagesScreen(service: service),
-          SystemScreen(service: service),
+          if (_offlineMode) _buildOfflineBanner(),
+          Expanded(
+            child: PageView(
+              controller: pageController,
+              onPageChanged: _onPageChanged,
+              physics: const BouncingScrollPhysics(),
+              children: [
+                DashboardScreen(service: service),
+                NetworkScreen(service: service),
+                WifiScreen(service: service),
+                VpnScreen(service: service),
+                ClientsScreen(service: service),
+                PackagesScreen(service: service),
+                SystemScreen(service: service),
+              ],
+            ),
+          ),
         ],
       ),
       bottomNavigationBar: NavigationBar(
@@ -701,5 +808,103 @@ ListTile(
       ),
     );
     return body;
+  }
+
+  /// Баннер оффлайн-режима: показывает, что данные не обновляются,
+  /// и предлагает повторить подключение.
+  Widget _buildOfflineBanner() {
+    final s = AppStrings.of(context);
+    final ts = _lastDataTs;
+    String ageText = s.text('Нет кешированных данных');
+    if (ts != null) {
+      final ageSec = DateTime.now().millisecondsSinceEpoch ~/ 1000 - ts;
+      if (ageSec < 60) {
+        ageText = '${s.text('Последние данные обновлены')} ${ageSec}с назад';
+      } else if (ageSec < 3600) {
+        ageText = '${s.text('Последние данные обновлены')} ${ageSec ~/ 60}м назад';
+      } else {
+        ageText = '${s.text('Последние данные обновлены')} ${ageSec ~/ 3600}ч назад';
+      }
+    }
+    return Material(
+      color: Colors.orange.withValues(alpha: 0.18),
+      child: SafeArea(
+        bottom: false,
+        child: InkWell(
+          onTap: _retryConnection,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+            child: Row(
+              children: [
+                Icon(Icons.cloud_off_outlined,
+                    size: 18, color: Colors.orange.shade800),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        s.text('Оффлайн-режим'),
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.orange.shade900,
+                        ),
+                      ),
+                      Text(
+                        ageText,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.orange.shade800,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: _retryConnection,
+                  icon: const Icon(Icons.refresh, size: 16),
+                  label: Text(
+                    s.text('Повторить'),
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.orange.shade900,
+                    minimumSize: const Size(0, 32),
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Попытка переподключения по тапу на баннер.
+  Future<void> _retryConnection() async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await service.connect();
+      if (!mounted) return;
+      setState(() => _offlineMode = false);
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(AppStrings.of(context).text('Подключение успешно')),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('${AppStrings.of(context).text('Ошибка')}: $e'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
   }
 }
