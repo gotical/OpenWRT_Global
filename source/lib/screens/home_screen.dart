@@ -23,6 +23,7 @@ import 'wps_audit_screen.dart';
 import 'firewall_screen.dart';
 import '../services/offline_cache.dart';
 import '../services/router_monitor.dart';
+import '../services/app_version.dart';
 import '../widgets/connection_dot.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -581,6 +582,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               ),
             ),
             const SizedBox(width: 8),
+            // Индикатор Online/Offline. Тап = переподключение.
+            // Кнопка меню слева (hamburger) — стандартная для Drawer.
+            // Повтор подключения также доступен в Drawer.
             ConnectionDot(
               online: !_offlineMode,
               cachedAgeSec: _lastDataTs == null
@@ -590,13 +594,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             ),
           ],
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Повторить подключение',
-            onPressed: _retryConnection,
-          ),
-        ],
       ),
       drawer: Drawer(
         child: SafeArea(
@@ -613,28 +610,38 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   children: [
                     Image.asset('assets/icon/router_icon.png', width: 64, height: 64),
                     const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            widget.config.name,
-                            style: theme.textTheme.titleLarge?.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                        ConnectionDot(
-                          online: !_offlineMode,
-                          cachedAgeSec: _lastDataTs == null
-                              ? null
-                              : DateTime.now().millisecondsSinceEpoch ~/ 1000 - _lastDataTs!,
-                          onRetry: _retryConnection,
-                        ),
-                      ],
+                    Text(
+                      widget.config.name,
+                      style: theme.textTheme.titleLarge?.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 4),
-                    Text('${widget.config.username}@${widget.config.host}', style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white70)),
+                    Text(
+                      '${widget.config.username}@${widget.config.host}',
+                      style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white70),
+                    ),
                   ],
                 ),
               ),
+              // Отдельный пункт "Повторить подключение" в Drawer, чтобы не было дублей.
+              ListTile(
+                leading: Icon(
+                  _offlineMode ? Icons.cloud_off_outlined : Icons.refresh,
+                  color: _offlineMode ? Colors.orange : null,
+                ),
+                title: Text(
+                  _offlineMode
+                      ? AppStrings.of(context).text('Оффлайн-режим')
+                      : AppStrings.of(context).text('Повторить подключение'),
+                ),
+                subtitle: _offlineMode && _lastDataTs != null
+                    ? Text(_formatAge(_lastDataTs!), style: const TextStyle(fontSize: 12))
+                    : null,
+                onTap: () {
+                  Navigator.pop(context);
+                  _retryConnection();
+                },
+              ),
+              const Divider(),
               ListTile(
                 leading: const Icon(Icons.multiline_chart),
                  title: Text(AppStrings.of(context).text('Мониторинг соединений')),
@@ -798,9 +805,13 @@ ListTile(
                 },
               ),
               const Spacer(),
-              const Padding(
-                padding: EdgeInsets.all(16),
-                  child: Text('OPENWRT - Global v4.0.8\nРыбинскLAB', style: TextStyle(color: Colors.grey), textAlign: TextAlign.center),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                  child: Text(
+                    'OPENWRT - Global ${AppVersion.display}\nРыбинскLAB',
+                    style: const TextStyle(color: Colors.grey),
+                    textAlign: TextAlign.center,
+                  ),
               ),
             ],
           ),
@@ -910,6 +921,14 @@ ListTile(
   }
 
   /// Попытка переподключения по тапу на баннер.
+  String _formatAge(int ts) {
+    final ageSec = DateTime.now().millisecondsSinceEpoch ~/ 1000 - ts;
+    if (ageSec < 60) return '${ageSec}с назад';
+    if (ageSec < 3600) return '${ageSec ~/ 60}м назад';
+    if (ageSec < 86400) return '${ageSec ~/ 3600}ч назад';
+    return '${ageSec ~/ 86400}д назад';
+  }
+
   Future<void> _retryConnection() async {
     final messenger = ScaffoldMessenger.of(context);
     try {

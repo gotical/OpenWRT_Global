@@ -13,6 +13,7 @@ import 'services/router_monitor.dart';
 import 'services/secure_screen.dart';
 import 'services/storage_service.dart';
 import 'services/update_service.dart';
+import 'services/app_version.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -34,16 +35,9 @@ void main() async {
   }
   // Инициализация уведомлений.
   await NotificationService.init();
-  // Текущая версия приложения для проверки обновлений.
-  try {
-    final pkg = await rootBundle.loadString('pubspec.yaml');
-    final match = RegExp(r'version:\s*(\d+\.\d+\.\d+)').firstMatch(pkg);
-    if (match != null) {
-      UpdateService.setCurrentVersion(match.group(1)!);
-    }
-  } catch (_) {
-    // ignore
-  }
+  // Загружаем версию из pubspec.yaml (используется в AppBar, About, UpdateService).
+  await AppVersion.load();
+  UpdateService.setCurrentVersion(AppVersion.version);
   if (await StorageService.loadSecureScreen()) {
     SecureScreen.enable();
   } else {

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../l10n/app_strings.dart';
 import '../main.dart';
+import '../services/app_version.dart';
 
 class AboutScreen extends StatelessWidget {
   const AboutScreen({super.key});
@@ -69,7 +70,7 @@ class AboutScreen extends StatelessWidget {
                 const SizedBox(height: 4),
                 Center(
                    child: Text(
-                     '${strings.version} 4.0.8',
+                     '${strings.version} ${AppVersion.display}',
                     style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                   ),
                  ),
@@ -174,6 +175,12 @@ class AboutScreen extends StatelessWidget {
                           '• Обновление прошивки OpenWRT через auc\n'
                           '• Топология сети, статические IP, ограничения скорости\n'
                           '• Проверка зависимостей с автоустановкой\n'
+                          '• 11 языков (ru, uk, kk, be, es, ar, vi, id, hi, fa)\n'
+                          '• 100+ пресетов WAN-провайдеров из 11 стран\n'
+                          '• Оффлайн-режим с кешем 24ч (6 экранов)\n'
+                          '• Виджет на рабочем столе Android\n'
+                          '• Quick Settings Tile в шторке Android\n'
+                          '• Локальные push-уведомления (без сторонних сервисов)\n'
                            '• Поддержка OpenWrt 24.10.3 / 24.10.8 / 25.12.5'),
                            style: const TextStyle(fontSize: 13),
                         ),
