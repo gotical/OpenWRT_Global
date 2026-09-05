@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Зелёная иконка: для состояния "онлайн" -->
+    <item>
+        <shape android:shape="oval">
+            <solid android:color="#22C55E" />
+            <size android:width="108dp" android:height="108dp" />
+        </shape>
+    </item>
+    <item android:gravity="center">
+        <shape android:shape="oval">
+            <solid android:color="#FFFFFF" />
+            <size android:width="60dp" android:height="60dp" />
+        </shape>
+    </item>
+    <item android:gravity="center">
+        <shape android:shape="oval">
+            <solid android:color="#22C55E" />
+            <size android:width="44dp" android:height="44dp" />
+        </shape>
+    </item>
+</layer-list>

@@ -8,6 +8,7 @@ import '../services/openwrt_service.dart';
 import '../services/storage_service.dart';
 import '../services/backup_service.dart';
 import '../services/notification_service.dart';
+import '../services/update_service.dart';
 import '../services/device_security.dart';
 import '../services/secure_screen.dart';
 import '../services/ai_analysis_service.dart';
@@ -597,6 +598,142 @@ class _SystemScreenState extends State<SystemScreen> {
         ]),
         actions: [
            TextButton(onPressed: () => Navigator.pop(ctx), child: Text(_t('Закрыть'))),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _setupUpdateSource() async {
+    final current = await UpdateService.getSource();
+    UpdateSource selected = current;
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSt) => AlertDialog(
+          title: Row(children: [
+            const Icon(Icons.system_update_outlined),
+            const SizedBox(width: 8),
+            Text(_t('Источник обновлений')),
+          ]),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(_t('Откуда проверять наличие новых версий приложения:')),
+              const SizedBox(height: 12),
+              RadioListTile<UpdateSource>(
+                title: const Text('GitHub'),
+                subtitle: Text(_t('Релизы в репозитории gotical/OpenWRT_Global')),
+                value: UpdateSource.github,
+                groupValue: selected,
+                onChanged: (v) => setSt(() => selected = v ?? UpdateSource.github),
+              ),
+              RadioListTile<UpdateSource>(
+                title: const Text('rybinsklab.ru'),
+                subtitle: Text(_t('Официальный сайт (админка публикует версии)')),
+                value: UpdateSource.website,
+                groupValue: selected,
+                onChanged: (v) => setSt(() => selected = v ?? UpdateSource.website),
+              ),
+              RadioListTile<UpdateSource>(
+                title: Text(_t('Отключено')),
+                subtitle: Text(_t('Не проверять обновления автоматически')),
+                value: UpdateSource.disabled,
+                groupValue: selected,
+                onChanged: (v) => setSt(() => selected = v ?? UpdateSource.disabled),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: Text(_t('Закрыть'))),
+            FilledButton(
+              onPressed: () async {
+                await UpdateService.setSource(selected);
+                if (ctx.mounted) {
+                  Navigator.pop(ctx);
+                  if (mounted) {
+                    final messenger = ScaffoldMessenger.of(context);
+                    messenger.showSnackBar(
+                      SnackBar(content: Text('${_t('Источник обновлений')}: ${selected.label}')),
+                    );
+                  }
+                }
+              },
+              child: Text(_t('Сохранить')),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _checkForUpdates() async {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text('${_t('Проверка обновлений')}...'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+    final info = await UpdateService.checkForUpdate();
+    if (!mounted) return;
+    if (info == null) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(_t('Обновлений не найдено')),
+          backgroundColor: Colors.green,
+        ),
+      );
+      return;
+    }
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(children: [
+          const Icon(Icons.system_update, color: Colors.blue),
+          const SizedBox(width: 8),
+          Text('${_t('Доступно обновление')} ${info.latestVersion}'),
+        ]),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('${_t('Источник')}: ${info.source}'),
+            if (info.publishedAt != null)
+              Text('${_t('Опубликовано')}: ${info.publishedAt!.toLocal()}'),
+            const SizedBox(height: 12),
+            if (info.releaseNotes.isNotEmpty) ...[
+              Text(_t('Что нового:'),
+                  style: const TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 6),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 200),
+                child: SingleChildScrollView(
+                  child: Text(info.releaseNotes, style: const TextStyle(fontSize: 12)),
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+            Text('${_t('Скачать')}: ${info.downloadUrl}'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              await UpdateService.skipVersion(info.latestVersion);
+              if (ctx.mounted) Navigator.pop(ctx);
+            },
+            child: Text(_t('Позже')),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (info.downloadUrl.isNotEmpty) {
+                UpdateService.openDownload(info.downloadUrl);
+              }
+              Navigator.pop(ctx);
+            },
+            child: Text(_t('Скачать')),
+          ),
         ],
       ),
     );
@@ -1919,6 +2056,10 @@ class _SystemScreenState extends State<SystemScreen> {
                      _ActionCard(icon: Icons.backup, title: s.text('Бэкап конфигурации'), subtitle: s.text('AES-256 экспорт/импорт'), onTap: _showBackupDialog),
                     const SizedBox(height: 12),
                     _ActionCard(icon: Icons.notifications, title: s.text('Уведомления'), subtitle: s.text('мониторинг роутера'), onTap: _setupNotifications),
+                    const SizedBox(height: 12),
+                    _ActionCard(icon: Icons.system_update_outlined, title: s.text('Источник обновлений'), subtitle: s.text('GitHub / сайт / отключено'), onTap: _setupUpdateSource),
+                    const SizedBox(height: 12),
+                    _ActionCard(icon: Icons.refresh_outlined, title: s.text('Проверить обновления'), subtitle: s.text('через выбранный источник'), onTap: _checkForUpdates),
                     const SizedBox(height: 12),
                     _ActionCard(icon: Icons.security, title: s.text('Безопасность устройства'), subtitle: s.text('Root/эмулятор/отладка'), onTap: _showSecurityStatus),
                     const SizedBox(height: 12),

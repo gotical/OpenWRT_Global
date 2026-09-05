@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../l10n/app_strings.dart';
 import '../models/network_info.dart';
+import '../services/offline_cache.dart';
 import '../services/openwrt_service.dart';
 
 class NetworkScreen extends StatefulWidget {
@@ -25,7 +26,23 @@ class _NetworkScreenState extends State<NetworkScreen> {
   @override
   void initState() {
     super.initState();
+    _showCacheFirst();
     _load();
+  }
+
+  /// Показывает кешированные данные МГНОВЕННО, без спиннера.
+  Future<void> _showCacheFirst() async {
+    final key = OfflineCacheService.hostKey(
+      widget.service.config.host,
+      widget.service.config.port,
+      widget.service.config.username,
+    );
+    final cached = await OfflineCacheService.loadNetworkInterfaces(key);
+    if (!mounted || cached.isEmpty) return;
+    setState(() {
+      interfaces = cached;
+      loading = false;
+    });
   }
 
   Future<void> _load() async {
@@ -48,6 +65,16 @@ class _NetworkScreenState extends State<NetworkScreen> {
         wifiWanSsid = staSsid; wifiWanDevice = staDev;
         loading = false; error = null;
       });
+      // Сохраняем в оффлайн-кеш.
+      // ignore: discarded_futures
+      OfflineCacheService.saveNetworkInterfaces(
+        OfflineCacheService.hostKey(
+          widget.service.config.host,
+          widget.service.config.port,
+          widget.service.config.username,
+        ),
+        data,
+      );
     } catch (e) { if (mounted) setState(() { error = e.toString(); loading = false; }); }
   }
 

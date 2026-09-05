@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../l10n/app_strings.dart';
 import '../models/wifi_info.dart';
+import '../services/offline_cache.dart';
 import '../services/openwrt_service.dart';
 import '../services/local_wifi_scanner.dart';
 import '../models/channel_scan_result.dart';
@@ -30,7 +31,23 @@ class _WifiScreenState extends State<WifiScreen> {
   @override
   void initState() {
     super.initState();
+    _showCacheFirst();
     _load();
+  }
+
+  /// Показывает кешированные данные МГНОВЕННО, без спиннера.
+  Future<void> _showCacheFirst() async {
+    final key = OfflineCacheService.hostKey(
+      widget.service.config.host,
+      widget.service.config.port,
+      widget.service.config.username,
+    );
+    final cached = await OfflineCacheService.loadWifiNetworks(key);
+    if (!mounted || cached.isEmpty) return;
+    setState(() {
+      networks = cached;
+      loading = false;
+    });
   }
 
   Future<void> _load() async {
@@ -45,6 +62,16 @@ class _WifiScreenState extends State<WifiScreen> {
         loading = false;
         error = null;
       });
+      // Сохраняем в оффлайн-кеш.
+      // ignore: discarded_futures
+      OfflineCacheService.saveWifiNetworks(
+        OfflineCacheService.hostKey(
+          widget.service.config.host,
+          widget.service.config.port,
+          widget.service.config.username,
+        ),
+        nets,
+      );
       // Параллельно грузим каналы
       for (final d in devs) {
         _loadChannels(d.name);

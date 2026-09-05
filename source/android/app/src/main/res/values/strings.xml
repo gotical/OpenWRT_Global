@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_description">OpenWRT Global — статус роутера на рабочем столе</string>
+    <string name="qs_tile_label">OpenWRT</string>
+</resources>

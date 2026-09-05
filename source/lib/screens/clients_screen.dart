@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../l10n/app_strings.dart';
 import 'package:intl/intl.dart';
 import '../models/client_info.dart';
+import '../services/offline_cache.dart';
 import '../services/openwrt_service.dart';
 import '../services/storage_service.dart';
 import '../widgets/app_skeleton.dart';
@@ -34,7 +35,24 @@ class ClientsScreenState extends State<ClientsScreen> {
   void initState() {
     super.initState();
     _searchCtrl.addListener(_filter);
+    _showCacheFirst();
     _load();
+  }
+
+  /// Показывает кешированные данные МГНОВЕННО, без спиннера.
+  Future<void> _showCacheFirst() async {
+    final key = OfflineCacheService.hostKey(
+      widget.service.config.host,
+      widget.service.config.port,
+      widget.service.config.username,
+    );
+    final cached = await OfflineCacheService.loadClients(key);
+    if (!mounted || cached.isEmpty) return;
+    setState(() {
+      allClients = cached;
+      _filter();
+      loading = false;
+    });
   }
 
   Future<void> _load() async {
@@ -54,6 +72,16 @@ class ClientsScreenState extends State<ClientsScreen> {
         loading = false;
         error = null;
       });
+      // Сохраняем в оффлайн-кеш.
+      // ignore: discarded_futures
+      OfflineCacheService.saveClients(
+        OfflineCacheService.hostKey(
+          widget.service.config.host,
+          widget.service.config.port,
+          widget.service.config.username,
+        ),
+        data,
+      );
     } catch (e) {
       if (!mounted) return;
       setState(() {

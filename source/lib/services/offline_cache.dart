@@ -8,6 +8,7 @@ import '../models/wifi_info.dart';
 import '../models/client_info.dart';
 import '../models/vpn_info.dart';
 import '../models/network_info.dart';
+import '../models/package_info.dart';
 import 'app_logger.dart';
 
 /// Кеш последних данных роутера для офлайн-режима.
@@ -51,6 +52,10 @@ class OfflineCacheService {
 
   static Future<void> saveNetworkInterfaces(String hostKey, List<NetworkInterface> nets) async {
     await _write(hostKey, 'network', nets.map(_serializeNetwork).toList());
+  }
+
+  static Future<void> savePackages(String hostKey, List<PackageInfo> packages) async {
+    await _write(hostKey, 'packages', packages.map(_serializePackage).toList());
   }
 
   // ---- Чтение ----
@@ -111,6 +116,15 @@ class OfflineCacheService {
         .toList();
   }
 
+  static Future<List<PackageInfo>> loadPackages(String hostKey, {Duration? maxAge}) async {
+    final raw = await _read(hostKey, 'packages', maxAge: maxAge);
+    if (raw is! List) return [];
+    return raw
+        .whereType<Map>()
+        .map((e) => _deserializePackage(Map<String, dynamic>.from(e)))
+        .toList();
+  }
+
   // ---- Метаданные ----
 
   /// Возвращает timestamp последнего обновления для данной секции.
@@ -141,6 +155,7 @@ class OfflineCacheService {
       'clients',
       'vpn',
       'network',
+      'packages',
     ]) {
       await prefs.remove(_key('$hostKey/$section'));
     }
@@ -352,5 +367,23 @@ class OfflineCacheService {
         stats: m['stats'] is Map
             ? Map<String, dynamic>.from(m['stats'] as Map)
             : null,
+      );
+
+  static Map<String, dynamic> _serializePackage(PackageInfo p) => {
+        'name': p.name,
+        'version': p.version,
+        'size': p.size,
+        'section': p.section,
+        'description': p.description,
+        'installed': p.installed,
+      };
+
+  static PackageInfo _deserializePackage(Map<String, dynamic> m) => PackageInfo(
+        name: m['name']?.toString() ?? '',
+        version: m['version']?.toString() ?? '',
+        size: m['size']?.toString(),
+        section: m['section']?.toString(),
+        description: m['description']?.toString(),
+        installed: m['installed'] == true,
       );
 }

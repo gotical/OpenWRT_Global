@@ -60,4 +60,14 @@ class NotificationService {
   }) async {
     await show(id: id, title: '🚨 $title', body: body);
   }
+
+  /// Снимает уведомление по id.
+  static Future<void> cancel(int id) async {
+    try {
+      if (!_initialized) await init();
+      await _plugin.cancel(id: id);
+    } catch (e) {
+      AppLogger.e('Notification cancel failed', e);
+    }
+  }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../l10n/app_strings.dart';
 import '../models/package_info.dart';
+import '../services/offline_cache.dart';
 import '../services/openwrt_service.dart';
 import '../widgets/app_skeleton.dart';
 import '../widgets/empty_state.dart';
@@ -29,6 +30,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
   @override
   void initState() {
     super.initState();
+    _showCacheFirst();
     _load();
   }
 
@@ -36,6 +38,21 @@ class _PackagesScreenState extends State<PackagesScreen> {
   void dispose() {
     _searchCtrl.dispose();
     super.dispose();
+  }
+
+  /// Показывает кешированные данные МГНОВЕННО, без спиннера.
+  Future<void> _showCacheFirst() async {
+    final key = OfflineCacheService.hostKey(
+      widget.service.config.host,
+      widget.service.config.port,
+      widget.service.config.username,
+    );
+    final cached = await OfflineCacheService.loadPackages(key);
+    if (!mounted || cached.isEmpty) return;
+    setState(() {
+      installed = cached;
+      loading = false;
+    });
   }
 
   Future<void> _load() async {
@@ -56,6 +73,16 @@ class _PackagesScreenState extends State<PackagesScreen> {
         loading = false;
         error = null;
       });
+      // Сохраняем в оффлайн-кеш.
+      // ignore: discarded_futures
+      OfflineCacheService.savePackages(
+        OfflineCacheService.hostKey(
+          widget.service.config.host,
+          widget.service.config.port,
+          widget.service.config.username,
+        ),
+        data,
+      );
     } catch (e) {
       if (!mounted) return;
       setState(() {

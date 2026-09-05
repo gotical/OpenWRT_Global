@@ -22,6 +22,7 @@ import 'mac_changer_screen.dart';
 import 'wps_audit_screen.dart';
 import 'firewall_screen.dart';
 import '../services/offline_cache.dart';
+import '../services/router_monitor.dart';
 import '../widgets/connection_dot.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -77,6 +78,13 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     ClientMonitor.instance.start(service);
     _autoSyncTime();
     _loadCacheTimestamp();
+    // Регистрируем роутер для фонового мониторинга (push-уведомления
+    // о недоступности и обновление виджета на рабочем столе).
+    // Требует, чтобы пользователь настроил SSH-ключ.
+    if (widget.config.useKey) {
+      RouterMonitorService.registerRouter(widget.config);
+      RouterMonitorService.startMonitoring();
+    }
     // Проверяем статус SSH каждые 5 секунд для баннера оффлайн-режима.
     _offlineCheckTimer = Timer.periodic(
       const Duration(seconds: 5),
@@ -127,6 +135,25 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       _lastDataTs = DateTime.now().millisecondsSinceEpoch ~/ 1000;
       _offlineMode = false;
     });
+    // Обновляем виджет и шторку (если роутер настроен для мониторинга).
+    if (widget.config.useKey) {
+      // ignore: discarded_futures
+      _updateWidgetsAfterRefresh();
+    }
+  }
+
+  Future<void> _updateWidgetsAfterRefresh() async {
+    try {
+      // Читаем актуальный SystemInfo из кеша.
+      final info = await OfflineCacheService.loadSystemInfo(_cacheKey);
+      if (info != null) {
+        // ignore: discarded_futures
+        RouterMonitorService.startMonitoring();
+        // Прямой вызов обновления виджета.
+        // ignore: discarded_futures
+        RouterMonitorService.registerRouter(widget.config);
+      }
+    } catch (_) {}
   }
 
   /// Авто-синхронизация времени роутера с телефоном при входе

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../l10n/app_strings.dart';
 import '../models/vpn_info.dart';
+import '../services/offline_cache.dart';
 import '../services/openwrt_service.dart';
 
 class VpnScreen extends StatefulWidget {
@@ -22,7 +23,23 @@ class _VpnScreenState extends State<VpnScreen> {
   @override
   void initState() {
     super.initState();
+    _showCacheFirst();
     _load();
+  }
+
+  /// Показывает кешированные данные МГНОВЕННО, без спиннера.
+  Future<void> _showCacheFirst() async {
+    final key = OfflineCacheService.hostKey(
+      widget.service.config.host,
+      widget.service.config.port,
+      widget.service.config.username,
+    );
+    final cached = await OfflineCacheService.loadVpnInterfaces(key);
+    if (!mounted || cached.isEmpty) return;
+    setState(() {
+      vpns = cached;
+      loading = false;
+    });
   }
 
   Future<void> _load() async {
@@ -35,6 +52,16 @@ class _VpnScreenState extends State<VpnScreen> {
         loading = false;
         error = null;
       });
+      // Сохраняем в оффлайн-кеш.
+      // ignore: discarded_futures
+      OfflineCacheService.saveVpnInterfaces(
+        OfflineCacheService.hostKey(
+          widget.service.config.host,
+          widget.service.config.port,
+          widget.service.config.username,
+        ),
+        data,
+      );
     } catch (e) {
       if (!mounted) return;
       setState(() {

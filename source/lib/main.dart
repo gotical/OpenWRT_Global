@@ -3,12 +3,16 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/services.dart';
+import 'package:workmanager/workmanager.dart';
 import 'l10n/app_strings.dart';
 import 'screens/login_screen.dart';
 import 'services/app_logger.dart';
 import 'services/di_container.dart';
+import 'services/notification_service.dart';
+import 'services/router_monitor.dart';
 import 'services/secure_screen.dart';
 import 'services/storage_service.dart';
+import 'services/update_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -22,6 +26,24 @@ void main() async {
     return true;
   };
   setupDi();
+  // Инициализация фоновой задачи мониторинга.
+  try {
+    await Workmanager().initialize(routerMonitorCallback);
+  } catch (e) {
+    AppLogger.w('WorkManager init failed: $e');
+  }
+  // Инициализация уведомлений.
+  await NotificationService.init();
+  // Текущая версия приложения для проверки обновлений.
+  try {
+    final pkg = await rootBundle.loadString('pubspec.yaml');
+    final match = RegExp(r'version:\s*(\d+\.\d+\.\d+)').firstMatch(pkg);
+    if (match != null) {
+      UpdateService.setCurrentVersion(match.group(1)!);
+    }
+  } catch (_) {
+    // ignore
+  }
   if (await StorageService.loadSecureScreen()) {
     SecureScreen.enable();
   } else {
